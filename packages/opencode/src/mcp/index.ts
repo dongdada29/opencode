@@ -53,12 +53,52 @@ export namespace MCP {
   export type Status = z.infer<typeof Status>
   type MCPClient = Awaited<ReturnType<typeof experimental_createMCPClient>>
 
+  // 内置 Browser MCP 配置
+  async function getBuiltinBrowserMCP(): Promise<Config.Mcp | undefined> {
+    // 检查是否通过环境变量禁用
+    if (process.env["OPENCODE_BROWSER_MCP_DISABLED"] === "true") {
+      return undefined
+    }
+
+    // 检查配置文件中是否禁用
+    const cfg = await Config.get()
+    if (cfg.mcp?.["browser"]?.enabled === false) {
+      return undefined
+    }
+
+    // 如果配置文件中已有 browser MCP 配置，使用配置文件中的
+    if (cfg.mcp?.["browser"]) {
+      return undefined // 让配置文件中的配置优先
+    }
+
+    // 从环境变量读取 Browser MCP 命令（如果提供）
+    const browserCommand = process.env["OPENCODE_BROWSER_MCP_COMMAND"]
+    const command = browserCommand
+      ? browserCommand.split(" ").filter(Boolean)
+      : ["npx", "-y", "@modelcontextprotocol/server-browser"]
+
+    return {
+      type: "local",
+      command,
+      enabled: true,
+      environment: process.env["OPENCODE_BROWSER_MCP_ENV"]
+        ? JSON.parse(process.env["OPENCODE_BROWSER_MCP_ENV"])
+        : undefined,
+    }
+  }
+
   const state = Instance.state(
     async () => {
       const cfg = await Config.get()
       const config = cfg.mcp ?? {}
       const clients: Record<string, Client> = {}
       const status: Record<string, Status> = {}
+
+      // 添加内置 Browser MCP（如果启用）
+      const browserMCP = await getBuiltinBrowserMCP()
+      if (browserMCP && !config["browser"]) {
+        config["browser"] = browserMCP
+      }
 
       await Promise.all(
         Object.entries(config).map(async ([key, mcp]) => {

@@ -647,14 +647,25 @@ export namespace SessionPrompt {
     providerID: string
     modelID: string
   }) {
+    // 优先检查环境变量中的系统提示词
+    const envSystemPrompt = await SystemPrompt.fromEnv()
+    
     let system = SystemPrompt.header(input.providerID)
-    system.push(
-      ...(() => {
-        if (input.system) return [input.system]
-        if (input.agent.prompt) return [input.agent.prompt]
-        return SystemPrompt.provider(input.modelID)
-      })(),
-    )
+    
+    // 如果环境变量中有系统提示词，优先使用
+    if (envSystemPrompt) {
+      system.push(envSystemPrompt)
+    } else {
+      // 否则使用原有逻辑
+      system.push(
+        ...(() => {
+          if (input.system) return [input.system]
+          if (input.agent.prompt) return [input.agent.prompt]
+          return SystemPrompt.provider(input.modelID)
+        })(),
+      )
+    }
+    
     system.push(...(await SystemPrompt.environment()))
     system.push(...(await SystemPrompt.custom()))
     // max 2 system prompt messages for caching purposes
@@ -747,8 +758,25 @@ export namespace SessionPrompt {
       })
     }
 
+    // 从环境变量读取 MCP 启用/禁用配置（会话级别控制）
+    const mcpEnabledEnv = process.env["OPENCODE_MCP_ENABLED"]
+    const mcpDisabledEnv = process.env["OPENCODE_MCP_DISABLED"]
+    const mcpEnabled = mcpEnabledEnv ? new Set(mcpEnabledEnv.split(",").map((s) => s.trim()).filter(Boolean)) : undefined
+    const mcpDisabled = mcpDisabledEnv ? new Set(mcpDisabledEnv.split(",").map((s) => s.trim()).filter(Boolean)) : undefined
+
     for (const [key, item] of Object.entries(await MCP.tools())) {
       if (Wildcard.all(key, enabledTools) === false) continue
+      
+      // 应用 MCP 环境变量过滤
+      // MCP 工具名称格式: {mcpName}_{toolName}
+      const mcpName = key.split("_")[0]
+      if (mcpEnabled && !mcpEnabled.has(mcpName) && !Array.from(mcpEnabled).some((enabled) => key.startsWith(enabled + "_"))) {
+        continue
+      }
+      if (mcpDisabled && (mcpDisabled.has(mcpName) || Array.from(mcpDisabled).some((disabled) => key.startsWith(disabled + "_")))) {
+        continue
+      }
+      
       const execute = item.execute
       if (!execute) continue
 
@@ -1061,6 +1089,23 @@ export namespace SessionPrompt {
               text:
                 "Use the above message and context to generate a prompt and call the task tool with subagent: " +
                 part.name,
+            },
+          ]
+        }
+
+        // 处理文本部分，应用环境变量前缀和后缀
+        if (part.type === "text") {
+          const prefix = process.env["OPENCODE_USER_PROMPT_PREFIX"] || ""
+          const suffix = process.env["OPENCODE_USER_PROMPT_SUFFIX"] || ""
+          const text = prefix + part.text + suffix
+
+          return [
+            {
+              id: Identifier.ascending("part"),
+              ...part,
+              text,
+              messageID: info.id,
+              sessionID: input.sessionID,
             },
           ]
         }

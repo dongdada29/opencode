@@ -11,6 +11,8 @@ export interface ACPSessionState {
     modelID: string
   }
   modeId?: string
+  mcpEnabled?: string[] // 启用的 MCP 工具列表（从环境变量读取）
+  mcpDisabled?: string[] // 禁用的 MCP 工具列表（从环境变量读取）
 }
 
 export interface ACPConfig {

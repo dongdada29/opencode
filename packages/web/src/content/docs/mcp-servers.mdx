@@ -9,6 +9,7 @@ OpenCode supports both:
 
 - Local servers
 - Remote servers
+- Built-in Browser MCP (automatically enabled)
 
 Once added, MCP tools are automatically available to the LLM alongside built-in tools.
 
@@ -245,6 +246,58 @@ The glob pattern uses simple regex globbing patterns.
 - `*` matches zero or more of any character
 - `?` matches exactly one character
 - All other characters match literally
+
+---
+
+## Built-in Browser MCP
+
+OpenCode includes a built-in Browser MCP tool that provides browser automation capabilities. It's automatically enabled and available for use in subagent tasks.
+
+### Features
+
+The Browser MCP tool provides tools for:
+- Navigating to URLs
+- Taking screenshots
+- Clicking elements
+- Typing text
+- Extracting page content
+- And more browser automation features
+
+### Configuration
+
+The Browser MCP is enabled by default. You can configure it using environment variables:
+
+```bash
+# Disable Browser MCP
+export OPENCODE_BROWSER_MCP_DISABLED="true"
+
+# Use a custom Browser MCP command
+export OPENCODE_BROWSER_MCP_COMMAND="npx -y @chrome-devtools/mcp"
+
+# Set environment variables for Browser MCP (JSON format)
+export OPENCODE_BROWSER_MCP_ENV='{"CHROME_PATH": "/path/to/chrome"}'
+```
+
+You can also disable it in your config:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "browser": {
+      "enabled": false
+    }
+  }
+}
+```
+
+### Usage
+
+The Browser MCP tools are automatically available to subagents. You can reference them in your prompts or agent configurations:
+
+```md title="AGENTS.md"
+When you need to interact with web pages, use the browser MCP tools.
+```
 
 ---
 

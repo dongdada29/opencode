@@ -19,6 +19,30 @@ import PROMPT_TITLE from "./prompt/title.txt"
 import PROMPT_CODEX from "./prompt/codex.txt"
 
 export namespace SystemPrompt {
+  // 从环境变量读取系统提示词
+  async function getSystemPromptFromEnv(): Promise<string | undefined> {
+    const envPrompt = process.env["OPENCODE_SYSTEM_PROMPT"]
+    if (!envPrompt) return undefined
+
+    // 如果是文件路径，读取文件内容
+    if (envPrompt.startsWith("file://") || envPrompt.startsWith("/") || envPrompt.startsWith("~/")) {
+      const filePath = envPrompt.startsWith("~/")
+        ? path.join(os.homedir(), envPrompt.slice(2))
+        : envPrompt.startsWith("file://")
+          ? envPrompt.slice(7)
+          : envPrompt
+
+      const file = Bun.file(filePath)
+      if (await file.exists()) {
+        return await file.text()
+      }
+      return undefined
+    }
+
+    // 直接返回文本内容
+    return envPrompt
+  }
+
   export function header(providerID: string) {
     if (providerID.includes("anthropic")) return [PROMPT_ANTHROPIC_SPOOF.trim()]
     return []
@@ -31,6 +55,11 @@ export namespace SystemPrompt {
     if (modelID.includes("claude")) return [PROMPT_ANTHROPIC]
     if (modelID.includes("polaris-alpha")) return [PROMPT_POLARIS]
     return [PROMPT_ANTHROPIC_WITHOUT_TODO]
+  }
+
+  // 获取环境变量中的系统提示词（用于运行时替换）
+  export async function fromEnv(): Promise<string | undefined> {
+    return await getSystemPromptFromEnv()
   }
 
   export async function environment() {

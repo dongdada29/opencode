@@ -29,14 +29,22 @@ export class ACPSessionManager {
     const sessionId = session.id
     const resolvedModel = model
 
+    // 从环境变量读取 MCP 启用/禁用配置
+    const mcpEnabledEnv = process.env["OPENCODE_MCP_ENABLED"]
+    const mcpDisabledEnv = process.env["OPENCODE_MCP_DISABLED"]
+    const mcpEnabled = mcpEnabledEnv ? mcpEnabledEnv.split(",").map((s) => s.trim()).filter(Boolean) : undefined
+    const mcpDisabled = mcpDisabledEnv ? mcpDisabledEnv.split(",").map((s) => s.trim()).filter(Boolean) : undefined
+
     const state: ACPSessionState = {
       id: sessionId,
       cwd,
       mcpServers,
       createdAt: new Date(),
       model: resolvedModel,
+      mcpEnabled,
+      mcpDisabled,
     }
-    log.info("creating_session", { state })
+    log.info("creating_session", { state, mcpEnabled, mcpDisabled })
 
     this.sessions.set(sessionId, state)
     return state

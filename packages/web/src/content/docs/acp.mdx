@@ -100,6 +100,71 @@ If you need to pass environment variables:
 
 ---
 
+## Runtime Environment Variables
+
+OpenCode supports runtime environment variables for dynamic configuration when using ACP. These can be set when starting the ACP server or passed through your editor configuration.
+
+### Provider Configuration
+
+Dynamically configure provider API URLs, keys, and models at runtime:
+
+```bash
+# Set provider base URL
+export OPENCODE_PROVIDER_ANTHROPIC_BASE_URL="https://api.minimaxi.com/anthropic"
+
+# Set provider API key
+export OPENCODE_PROVIDER_ANTHROPIC_API_KEY="your-api-key"
+
+# Set available models (JSON array)
+export OPENCODE_PROVIDER_ANTHROPIC_MODELS='["model1", "model2"]'
+```
+
+Environment variable format: `OPENCODE_PROVIDER_{PROVIDER_ID}_{CONFIG_KEY}`
+
+### Prompt Customization
+
+Override system and user prompts at runtime:
+
+```bash
+# Replace system prompt (supports file paths or direct text)
+export OPENCODE_SYSTEM_PROMPT="file:///path/to/custom-prompt.txt"
+# Or use direct text:
+export OPENCODE_SYSTEM_PROMPT="You are a helpful assistant..."
+
+# Add prefix/suffix to user prompts
+export OPENCODE_USER_PROMPT_PREFIX="[Context] "
+export OPENCODE_USER_PROMPT_SUFFIX=" [End Context]"
+```
+
+### MCP Tool Control
+
+Control which MCP tools are enabled/disabled per session:
+
+```bash
+# Enable specific MCP tools (comma-separated)
+export OPENCODE_MCP_ENABLED="browser,github"
+
+# Disable specific MCP tools (comma-separated)
+export OPENCODE_MCP_DISABLED="filesystem,database"
+```
+
+### Browser MCP
+
+The built-in Browser MCP tool is automatically enabled. You can configure it:
+
+```bash
+# Disable Browser MCP
+export OPENCODE_BROWSER_MCP_DISABLED="true"
+
+# Custom Browser MCP command
+export OPENCODE_BROWSER_MCP_COMMAND="npx -y @chrome-devtools/mcp"
+
+# Browser MCP environment variables (JSON format)
+export OPENCODE_BROWSER_MCP_ENV='{"CHROME_PATH": "/path/to/chrome"}'
+```
+
+---
+
 ## Support
 
 OpenCode works the same via ACP as it does in the terminal. All features are supported:
@@ -111,6 +176,8 @@ Some built-in slash commands like `/undo` and `/redo` are currently unsupported.
 - Built-in tools (file operations, terminal commands, etc.)
 - Custom tools and slash commands
 - MCP servers configured in your OpenCode config
+- Built-in Browser MCP tool (automatically enabled)
 - Project-specific rules from `AGENTS.md`
 - Custom formatters and linters
 - Agents and permissions system
+- Runtime environment variable configuration

@@ -706,6 +706,46 @@ export namespace Provider {
     return state().then((state) => state.providers)
   }
 
+  // 解析运行时环境变量配置
+  function parseRuntimeEnvConfig(providerID: string): Record<string, any> {
+    const envOptions: Record<string, any> = {}
+    const upperProviderID = providerID.toUpperCase().replace(/[^A-Z0-9]/g, "_")
+
+    // 支持 OPENCODE_PROVIDER_{PROVIDER_ID}_BASE_URL
+    const baseURLKey = `OPENCODE_PROVIDER_${upperProviderID}_BASE_URL`
+    const baseURL = process.env[baseURLKey]
+    if (baseURL) {
+      envOptions.baseURL = baseURL
+    }
+
+    // 支持 OPENCODE_PROVIDER_{PROVIDER_ID}_API_KEY
+    const apiKeyKey = `OPENCODE_PROVIDER_${upperProviderID}_API_KEY`
+    const apiKey = process.env[apiKeyKey]
+    if (apiKey) {
+      envOptions.apiKey = apiKey
+    }
+
+    // 支持 OPENCODE_PROVIDER_{PROVIDER_ID}_MODELS (JSON 格式)
+    const modelsKey = `OPENCODE_PROVIDER_${upperProviderID}_MODELS`
+    const modelsStr = process.env[modelsKey]
+    if (modelsStr) {
+      try {
+        const models = JSON.parse(modelsStr)
+        if (Array.isArray(models)) {
+          envOptions.models = models
+        }
+      } catch (e) {
+        log.warn("failed to parse models from environment variable", {
+          providerID,
+          key: modelsKey,
+          error: e instanceof Error ? e.message : String(e),
+        })
+      }
+    }
+
+    return envOptions
+  }
+
   async function getSDK(provider: ModelsDev.Provider, model: ModelsDev.Model) {
     return (async () => {
       using _ = log.time("getSDK", {
@@ -714,6 +754,11 @@ export namespace Provider {
       const s = await state()
       const pkg = model.provider?.npm ?? provider.npm ?? provider.id
       const options = { ...s.providers[provider.id]?.options }
+      
+      // 应用运行时环境变量配置（最高优先级）
+      const runtimeEnvConfig = parseRuntimeEnvConfig(provider.id)
+      Object.assign(options, runtimeEnvConfig)
+      
       if (pkg.includes("@ai-sdk/openai-compatible") && options["includeUsage"] === undefined) {
         options["includeUsage"] = true
       }
