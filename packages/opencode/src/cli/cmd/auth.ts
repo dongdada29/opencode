@@ -15,7 +15,7 @@ export const AuthCommand = cmd({
   describe: "manage credentials",
   builder: (yargs) =>
     yargs.command(AuthLoginCommand).command(AuthLogoutCommand).command(AuthListCommand).demandCommand(),
-  async handler() {},
+  async handler() { },
 })
 
 export const AuthListCommand = cmd({
@@ -33,7 +33,11 @@ export const AuthListCommand = cmd({
 
     for (const [providerID, result] of results) {
       const name = database[providerID]?.name || providerID
-      prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
+      let info = `${name} ${UI.Style.TEXT_DIM}${result.type}`
+      if (result.type === "api" && result.baseURL) {
+        info += ` ${UI.Style.TEXT_DIM}(${result.baseURL})`
+      }
+      prompts.log.info(info)
     }
 
     prompts.outro(`${results.length} credentials`)
@@ -102,7 +106,7 @@ export const AuthLoginCommand = cmd({
           prompts.outro("Done")
           return
         }
-        await ModelsDev.refresh().catch(() => {})
+        await ModelsDev.refresh().catch(() => { })
         const providers = await ModelsDev.get()
         const priority: Record<string, number> = {
           opencode: 0,
@@ -150,131 +154,142 @@ export const AuthLoginCommand = cmd({
                   label: x.label,
                   value: index.toString(),
                 })),
+                {
+                  label: "Custom (manual configuration)",
+                  value: "custom",
+                },
               ],
             })
             if (prompts.isCancel(method)) throw new UI.CancelledError()
-            index = parseInt(method)
-          }
-          const method = plugin.auth.methods[index]
-
-          // Handle prompts for all auth types
-          await new Promise((resolve) => setTimeout(resolve, 10))
-          const inputs: Record<string, string> = {}
-          if (method.prompts) {
-            for (const prompt of method.prompts) {
-              if (prompt.condition && !prompt.condition(inputs)) {
-                continue
-              }
-              if (prompt.type === "select") {
-                const value = await prompts.select({
-                  message: prompt.message,
-                  options: prompt.options,
-                })
-                if (prompts.isCancel(value)) throw new UI.CancelledError()
-                inputs[prompt.key] = value
-              } else {
-                const value = await prompts.text({
-                  message: prompt.message,
-                  placeholder: prompt.placeholder,
-                  validate: prompt.validate ? (v) => prompt.validate!(v ?? "") : undefined,
-                })
-                if (prompts.isCancel(value)) throw new UI.CancelledError()
-                inputs[prompt.key] = value
-              }
+            if (method === "custom") {
+              // Skip plugin and go to manual configuration
+              index = -1
+            } else {
+              index = parseInt(method)
             }
           }
+          if (index >= 0) {
+            const method = plugin.auth.methods[index]
 
-          if (method.type === "oauth") {
-            const authorize = await method.authorize(inputs)
-
-            if (authorize.url) {
-              prompts.log.info("Go to: " + authorize.url)
-            }
-
-            if (authorize.method === "auto") {
-              if (authorize.instructions) {
-                prompts.log.info(authorize.instructions)
-              }
-              const spinner = prompts.spinner()
-              spinner.start("Waiting for authorization...")
-              const result = await authorize.callback()
-              if (result.type === "failed") {
-                spinner.stop("Failed to authorize", 1)
-              }
-              if (result.type === "success") {
-                const saveProvider = result.provider ?? provider
-                if ("refresh" in result) {
-                  const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-                  await Auth.set(saveProvider, {
-                    type: "oauth",
-                    refresh,
-                    access,
-                    expires,
-                    ...extraFields,
-                  })
+            // Handle prompts for all auth types
+            await new Promise((resolve) => setTimeout(resolve, 10))
+            const inputs: Record<string, string> = {}
+            if (method.prompts) {
+              for (const prompt of method.prompts) {
+                if (prompt.condition && !prompt.condition(inputs)) {
+                  continue
                 }
-                if ("key" in result) {
-                  await Auth.set(saveProvider, {
-                    type: "api",
-                    key: result.key,
+                if (prompt.type === "select") {
+                  const value = await prompts.select({
+                    message: prompt.message,
+                    options: prompt.options,
                   })
+                  if (prompts.isCancel(value)) throw new UI.CancelledError()
+                  inputs[prompt.key] = value
+                } else {
+                  const value = await prompts.text({
+                    message: prompt.message,
+                    placeholder: prompt.placeholder,
+                    validate: prompt.validate ? (v) => prompt.validate!(v ?? "") : undefined,
+                  })
+                  if (prompts.isCancel(value)) throw new UI.CancelledError()
+                  inputs[prompt.key] = value
                 }
-                spinner.stop("Login successful")
               }
             }
 
-            if (authorize.method === "code") {
-              const code = await prompts.text({
-                message: "Paste the authorization code here: ",
-                validate: (x) => (x && x.length > 0 ? undefined : "Required"),
-              })
-              if (prompts.isCancel(code)) throw new UI.CancelledError()
-              const result = await authorize.callback(code)
-              if (result.type === "failed") {
-                prompts.log.error("Failed to authorize")
-              }
-              if (result.type === "success") {
-                const saveProvider = result.provider ?? provider
-                if ("refresh" in result) {
-                  const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-                  await Auth.set(saveProvider, {
-                    type: "oauth",
-                    refresh,
-                    access,
-                    expires,
-                    ...extraFields,
-                  })
-                }
-                if ("key" in result) {
-                  await Auth.set(saveProvider, {
-                    type: "api",
-                    key: result.key,
-                  })
-                }
-                prompts.log.success("Login successful")
-              }
-            }
+            if (method.type === "oauth") {
+              const authorize = await method.authorize(inputs)
 
-            prompts.outro("Done")
-            return
-          }
-
-          if (method.type === "api") {
-            if (method.authorize) {
-              const result = await method.authorize(inputs)
-              if (result.type === "failed") {
-                prompts.log.error("Failed to authorize")
+              if (authorize.url) {
+                prompts.log.info("Go to: " + authorize.url)
               }
-              if (result.type === "success") {
-                const saveProvider = result.provider ?? provider
-                await Auth.set(saveProvider, {
-                  type: "api",
-                  key: result.key,
+
+              if (authorize.method === "auto") {
+                if (authorize.instructions) {
+                  prompts.log.info(authorize.instructions)
+                }
+                const spinner = prompts.spinner()
+                spinner.start("Waiting for authorization...")
+                const result = await authorize.callback()
+                if (result.type === "failed") {
+                  spinner.stop("Failed to authorize", 1)
+                }
+                if (result.type === "success") {
+                  const saveProvider = result.provider ?? provider
+                  if ("refresh" in result) {
+                    const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
+                    await Auth.set(saveProvider, {
+                      type: "oauth",
+                      refresh,
+                      access,
+                      expires,
+                      ...extraFields,
+                    })
+                  }
+                  if ("key" in result) {
+                    await Auth.set(saveProvider, {
+                      type: "api",
+                      key: result.key,
+                    })
+                  }
+                  spinner.stop("Login successful")
+                }
+              }
+
+              if (authorize.method === "code") {
+                const code = await prompts.text({
+                  message: "Paste the authorization code here: ",
+                  validate: (x) => (x && x.length > 0 ? undefined : "Required"),
                 })
-                prompts.log.success("Login successful")
+                if (prompts.isCancel(code)) throw new UI.CancelledError()
+                const result = await authorize.callback(code)
+                if (result.type === "failed") {
+                  prompts.log.error("Failed to authorize")
+                }
+                if (result.type === "success") {
+                  const saveProvider = result.provider ?? provider
+                  if ("refresh" in result) {
+                    const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
+                    await Auth.set(saveProvider, {
+                      type: "oauth",
+                      refresh,
+                      access,
+                      expires,
+                      ...extraFields,
+                    })
+                  }
+                  if ("key" in result) {
+                    await Auth.set(saveProvider, {
+                      type: "api",
+                      key: result.key,
+                    })
+                  }
+                  prompts.log.success("Login successful")
+                }
               }
+
               prompts.outro("Done")
               return
+            }
+
+            if (method.type === "api") {
+              if (method.authorize) {
+                const result = await method.authorize(inputs)
+                if (result.type === "failed") {
+                  prompts.log.error("Failed to authorize")
+                }
+                if (result.type === "success") {
+                  const saveProvider = result.provider ?? provider
+                  await Auth.set(saveProvider, {
+                    type: "api",
+                    key: result.key,
+                  })
+                  prompts.log.success("Login successful")
+                }
+                prompts.outro("Done")
+                return
+              }
             }
           }
         }
@@ -313,13 +328,27 @@ export const AuthLoginCommand = cmd({
           validate: (x) => (x && x.length > 0 ? undefined : "Required"),
         })
         if (prompts.isCancel(key)) throw new UI.CancelledError()
+
+        let baseURL: string | undefined
+        if (provider === "anthropic") {
+          const url = await prompts.text({
+            message: "Enter Base URL (optional)",
+            placeholder: "https://api.anthropic.com/v1",
+          })
+          if (prompts.isCancel(url)) throw new UI.CancelledError()
+          if (url && url.length > 0) {
+            baseURL = url
+          }
+        }
+
         await Auth.set(provider, {
           type: "api",
           key,
+          baseURL,
         })
 
         prompts.outro("Done")
-      },
+      }
     })
   },
 })

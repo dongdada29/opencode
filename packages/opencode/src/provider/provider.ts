@@ -51,15 +51,38 @@ export namespace Provider {
   type Source = "env" | "config" | "custom" | "api"
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
-    async anthropic() {
+    async anthropic(provider) {
+      const config = await Config.get()
+      const configProvider = config.provider?.anthropic
+
+      const options: Record<string, any> = {
+        headers: {
+          "anthropic-beta":
+            "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+        },
+      }
+
+      // 支持配置自定义API URL (baseURL)
+      if (configProvider?.options?.baseURL) {
+        options.baseURL = configProvider.options.baseURL
+      }
+
+      // 支持配置自定义API Key
+      if (configProvider?.options?.apiKey) {
+        options.apiKey = configProvider.options.apiKey
+      }
+
+      // 支持配置自定义headers
+      if (configProvider?.options?.headers) {
+        options.headers = {
+          ...options.headers,
+          ...configProvider.options.headers,
+        }
+      }
+
       return {
         autoload: false,
-        options: {
-          headers: {
-            "anthropic-beta":
-              "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
-          },
-        },
+        options,
       }
     },
     async opencode(input) {
@@ -438,20 +461,58 @@ export namespace Provider {
     for (const [providerID, provider] of Object.entries(database)) {
       if (disabled.has(providerID)) continue
       const apiKey = provider.env.map((item) => process.env[item]).at(0)
-      if (!apiKey) continue
-      mergeProvider(
-        providerID,
-        // only include apiKey if there's only one potential option
-        provider.env.length === 1 ? { apiKey } : {},
-        "env",
-      )
+
+      const envOptions: Record<string, any> = {}
+
+      // 支持从环境变量读取API Key
+      if (apiKey) {
+        envOptions.apiKey = apiKey
+      }
+
+      // 支持三方兼容服务的baseURL
+      if (process.env[`${providerID.toUpperCase()}_BASE_URL`]) {
+        envOptions.baseURL = process.env[`${providerID.toUpperCase()}_BASE_URL`]
+      }
+
+      // Anthropic兼容的baseURL环境变量
+      if (providerID === "anthropic" && process.env["ANTHROPIC_BASE_URL"]) {
+        envOptions.baseURL = process.env["ANTHROPIC_BASE_URL"]
+      }
+
+      // 支持API_TIMEOUT_MS环境变量
+      if (process.env["API_TIMEOUT_MS"]) {
+        const timeout = parseInt(process.env["API_TIMEOUT_MS"])
+        if (!isNaN(timeout)) {
+          envOptions.timeout = timeout
+        }
+      }
+
+      if (Object.keys(envOptions).length > 0) {
+        mergeProvider(providerID, envOptions, "env")
+      }
     }
 
     // load apikeys
     for (const [providerID, provider] of Object.entries(await Auth.all())) {
       if (disabled.has(providerID)) continue
       if (provider.type === "api") {
-        mergeProvider(providerID, { apiKey: provider.key }, "api")
+        const options: Record<string, any> = { apiKey: provider.key }
+
+        // 支持从认证配置中读取 baseURL (用于三方兼容服务)
+        if (provider.baseURL) {
+          options.baseURL = provider.baseURL
+        }
+
+        // 支持从认证配置中读取其他选项
+        if (provider.timeout) {
+          options.timeout = provider.timeout
+        }
+
+        if (provider.headers) {
+          options.headers = provider.headers
+        }
+
+        mergeProvider(providerID, options, "api")
       }
     }
 
