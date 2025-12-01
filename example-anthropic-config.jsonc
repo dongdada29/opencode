@@ -6,9 +6,11 @@
     "anthropic": {
       "options": {
         // 自定义API URL，支持三方兼容的API endpoint
+        // 也可以通过环境变量 ANTHROPIC_BASE_URL 设置
         "baseURL": "https://api.your-custom-anthropic-compatible-endpoint.com/v1",
 
         // 自定义API Key
+        // 也可以通过环境变量 ANTHROPIC_AUTH_TOKEN 或 ANTHROPIC_API_KEY 设置
         "apiKey": "your-custom-api-key-here",
 
         // 自定义headers（可选）
@@ -16,6 +18,12 @@
           "X-Custom-Header": "custom-value",
           "X-Another-Header": "another-value",
         },
+
+        // 模型映射配置（可选，也可以通过环境变量设置）
+        // "defaultModel": "MiniMax-M2",              // 默认模型映射
+        // "defaultHaikuModel": "MiniMax-M2",         // Haiku 模型映射
+        // "defaultSonnetModel": "MiniMax-M2",        // Sonnet 模型映射
+        // "defaultOpusModel": "MiniMax-M2",          // Opus 模型映射
       },
 
       // 可选：覆盖模型配置

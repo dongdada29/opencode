@@ -12,7 +12,7 @@
         "apiKey": "{env:ANTHROPIC_AUTH_TOKEN}",
 
         // 方式2：直接指定值（如果不想使用环境变量）
-        // "baseURL": "https://api.minimaxi.com/anthropic",
+        // "baseURL": "https://api.minimaxi.com/anthropic/v1",
         // "apiKey": "your-api-key-here",
 
         // timeout会自动从API_TIMEOUT_MS环境变量读取，也可在配置中指定
@@ -24,6 +24,10 @@
           "cost": {
             "input": 0.001,
             "output": 0.002,
+          },
+          "limit": {
+            "context": 200000,
+            "output": 10000,
           },
         },
       },

@@ -62,14 +62,26 @@ export namespace Provider {
         },
       }
 
+      // 优先从环境变量读取，然后从配置文件读取（配置文件优先级更高）
       // 支持配置自定义API URL (baseURL)
+      // 环境变量已在 load env 部分处理，这里只处理配置文件
       if (configProvider?.options?.baseURL) {
         options.baseURL = configProvider.options.baseURL
+      } else if (process.env["ANTHROPIC_BASE_URL"]) {
+        // 如果配置文件中没有，使用环境变量
+        options.baseURL = process.env["ANTHROPIC_BASE_URL"]
       }
 
       // 支持配置自定义API Key
+      // 环境变量已在 load env 部分处理，这里只处理配置文件
       if (configProvider?.options?.apiKey) {
         options.apiKey = configProvider.options.apiKey
+      } else {
+        // 如果配置文件中没有，尝试从环境变量读取
+        const envApiKey = process.env["ANTHROPIC_AUTH_TOKEN"] || process.env["ANTHROPIC_API_KEY"]
+        if (envApiKey) {
+          options.apiKey = envApiKey
+        }
       }
 
       // 支持配置自定义headers
@@ -80,9 +92,68 @@ export namespace Provider {
         }
       }
 
+      // 支持模型映射环境变量
+      const modelMappings: Record<string, string> = {}
+      
+      // 从环境变量读取模型映射
+      if (process.env["ANTHROPIC_DEFAULT_HAIKU_MODEL"]) {
+        modelMappings.haiku = process.env["ANTHROPIC_DEFAULT_HAIKU_MODEL"]
+      }
+      if (process.env["ANTHROPIC_DEFAULT_OPUS_MODEL"]) {
+        modelMappings.opus = process.env["ANTHROPIC_DEFAULT_OPUS_MODEL"]
+      }
+      if (process.env["ANTHROPIC_DEFAULT_SONNET_MODEL"]) {
+        modelMappings.sonnet = process.env["ANTHROPIC_DEFAULT_SONNET_MODEL"]
+      }
+      if (process.env["ANTHROPIC_MODEL"]) {
+        modelMappings.default = process.env["ANTHROPIC_MODEL"]
+      }
+
+      // 从配置文件读取模型映射
+      if (configProvider?.options?.defaultHaikuModel) {
+        modelMappings.haiku = configProvider.options.defaultHaikuModel
+      }
+      if (configProvider?.options?.defaultOpusModel) {
+        modelMappings.opus = configProvider.options.defaultOpusModel
+      }
+      if (configProvider?.options?.defaultSonnetModel) {
+        modelMappings.sonnet = configProvider.options.defaultSonnetModel
+      }
+      if (configProvider?.options?.defaultModel) {
+        modelMappings.default = configProvider.options.defaultModel
+      }
+
       return {
         autoload: false,
         options,
+        async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
+          // 应用模型映射
+          let mappedModelID = modelID
+          const lowerModelID = modelID.toLowerCase()
+
+          // 检查是否是 haiku 模型（包括各种变体）
+          if (modelMappings.haiku && (lowerModelID.includes("haiku") || lowerModelID.includes("3-5-haiku") || lowerModelID.includes("3.5-haiku"))) {
+            mappedModelID = modelMappings.haiku
+            log.info("model mapping", { from: modelID, to: mappedModelID, type: "haiku" })
+          }
+          // 检查是否是 opus 模型
+          else if (modelMappings.opus && lowerModelID.includes("opus")) {
+            mappedModelID = modelMappings.opus
+            log.info("model mapping", { from: modelID, to: mappedModelID, type: "opus" })
+          }
+          // 检查是否是 sonnet 模型（包括各种变体）
+          else if (modelMappings.sonnet && lowerModelID.includes("sonnet")) {
+            mappedModelID = modelMappings.sonnet
+            log.info("model mapping", { from: modelID, to: mappedModelID, type: "sonnet" })
+          }
+          // 如果没有匹配到特定类型，使用默认模型映射
+          else if (modelMappings.default) {
+            mappedModelID = modelMappings.default
+            log.info("model mapping", { from: modelID, to: mappedModelID, type: "default" })
+          }
+
+          return sdk.languageModel(mappedModelID)
+        },
       }
     },
     async opencode(input) {
@@ -477,6 +548,14 @@ export namespace Provider {
       // Anthropic兼容的baseURL环境变量
       if (providerID === "anthropic" && process.env["ANTHROPIC_BASE_URL"]) {
         envOptions.baseURL = process.env["ANTHROPIC_BASE_URL"]
+      }
+
+      // Anthropic兼容的API Key环境变量（支持多种命名）
+      if (providerID === "anthropic") {
+        const anthropicApiKey = process.env["ANTHROPIC_AUTH_TOKEN"] || process.env["ANTHROPIC_API_KEY"]
+        if (anthropicApiKey) {
+          envOptions.apiKey = anthropicApiKey
+        }
       }
 
       // 支持API_TIMEOUT_MS环境变量
