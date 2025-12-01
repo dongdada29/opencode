@@ -1,0 +1,25 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "anthropic": {
+      "options": {
+        "baseURL": "{env:ANTHROPIC_BASE_URL}",
+        "apiKey": "{env:ANTHROPIC_AUTH_TOKEN}"
+      },
+      "models": {
+        "MiniMax-M2": {
+          "name": "MiniMax Claude兼容模型",
+          "cost": {
+            "input": 0.001,
+            "output": 0.002
+          },
+          "limit": {
+            "context": 200000,
+            "output": 10000
+          }
+        }
+      }
+    }
+  },
+  "model": "anthropic/MiniMax-M2"
+}
