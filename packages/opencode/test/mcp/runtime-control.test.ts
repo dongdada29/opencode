@@ -19,8 +19,9 @@ describe("MCP Runtime Control", () => {
 
   test("should parse MCP enabled list from environment variable", () => {
     process.env.OPENCODE_MCP_ENABLED = "browser,github,filesystem"
-    const enabled = process.env.OPENCODE_MCP_ENABLED
-      ? new Set(enabled.split(",").map((s) => s.trim()).filter(Boolean))
+    const enabledEnv = process.env.OPENCODE_MCP_ENABLED
+    const enabled = enabledEnv
+      ? new Set(enabledEnv.split(",").map((s: string) => s.trim()).filter(Boolean))
       : undefined
 
     expect(enabled).toBeDefined()
@@ -31,8 +32,9 @@ describe("MCP Runtime Control", () => {
 
   test("should parse MCP disabled list from environment variable", () => {
     process.env.OPENCODE_MCP_DISABLED = "database,redis"
-    const disabled = process.env.OPENCODE_MCP_DISABLED
-      ? new Set(disabled.split(",").map((s) => s.trim()).filter(Boolean))
+    const disabledEnv = process.env.OPENCODE_MCP_DISABLED
+    const disabled = disabledEnv
+      ? new Set(disabledEnv.split(",").map((s: string) => s.trim()).filter(Boolean))
       : undefined
 
     expect(disabled).toBeDefined()
@@ -41,11 +43,13 @@ describe("MCP Runtime Control", () => {
   })
 
   test("should handle empty MCP enabled/disabled lists", () => {
-    const enabled = process.env.OPENCODE_MCP_ENABLED
-      ? new Set(process.env.OPENCODE_MCP_ENABLED.split(",").map((s) => s.trim()).filter(Boolean))
+    const enabledEnv = process.env.OPENCODE_MCP_ENABLED
+    const enabled = enabledEnv
+      ? new Set(enabledEnv.split(",").map((s: string) => s.trim()).filter(Boolean))
       : undefined
-    const disabled = process.env.OPENCODE_MCP_DISABLED
-      ? new Set(process.env.OPENCODE_MCP_DISABLED.split(",").map((s) => s.trim()).filter(Boolean))
+    const disabledEnv = process.env.OPENCODE_MCP_DISABLED
+    const disabled = disabledEnv
+      ? new Set(disabledEnv.split(",").map((s: string) => s.trim()).filter(Boolean))
       : undefined
 
     expect(enabled).toBeUndefined()
@@ -54,8 +58,9 @@ describe("MCP Runtime Control", () => {
 
   test("should trim whitespace from MCP lists", () => {
     process.env.OPENCODE_MCP_ENABLED = " browser , github , filesystem "
-    const enabled = process.env.OPENCODE_MCP_ENABLED
-      ? new Set(process.env.OPENCODE_MCP_ENABLED.split(",").map((s) => s.trim()).filter(Boolean))
+    const enabledEnv = process.env.OPENCODE_MCP_ENABLED
+    const enabled = enabledEnv
+      ? new Set(enabledEnv.split(",").map((s: string) => s.trim()).filter(Boolean))
       : undefined
 
     expect(enabled?.has("browser")).toBe(true)
