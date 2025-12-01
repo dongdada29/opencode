@@ -1,0 +1,36 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // MiniMax等三方Anthropic兼容服务配置示例
+  // 注意：环境变量（ANTHROPIC_BASE_URL、ANTHROPIC_AUTH_TOKEN等）会自动读取，无需在配置中指定
+  // 但如果你想在配置文件中使用环境变量占位符，可以使用 {env:VARIABLE_NAME} 语法
+  "provider": {
+    "anthropic": {
+      "options": {
+        // 方式1：使用环境变量占位符（推荐用于配置文件）
+        "baseURL": "{env:ANTHROPIC_BASE_URL}",
+        "apiKey": "{env:ANTHROPIC_AUTH_TOKEN}",
+
+        // 方式2：直接指定值（如果不想使用环境变量）
+        // "baseURL": "https://api.minimaxi.com/anthropic",
+        // "apiKey": "your-api-key-here",
+
+        // timeout会自动从API_TIMEOUT_MS环境变量读取，也可在配置中指定
+      },
+
+      "models": {
+        "MiniMax-M2": {
+          "name": "MiniMax Claude兼容模型",
+          "cost": {
+            "input": 0.001,
+            "output": 0.002,
+          },
+        },
+      },
+    },
+  },
+
+  // 其他配置
+  "model": "anthropic/MiniMax-M2",
+  "theme": "dark",
+}

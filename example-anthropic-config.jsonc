@@ -1,0 +1,37 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // Anthropic三方兼容配置示例
+  "provider": {
+    "anthropic": {
+      "options": {
+        // 自定义API URL，支持三方兼容的API endpoint
+        "baseURL": "https://api.your-custom-anthropic-compatible-endpoint.com/v1",
+
+        // 自定义API Key
+        "apiKey": "your-custom-api-key-here",
+
+        // 自定义headers（可选）
+        "headers": {
+          "X-Custom-Header": "custom-value",
+          "X-Another-Header": "another-value",
+        },
+      },
+
+      // 可选：覆盖模型配置
+      "models": {
+        "claude-3-5-sonnet-20241022": {
+          "name": "自定义Claude模型名称",
+          "cost": {
+            "input": 0.003,
+            "output": 0.015,
+          },
+        },
+      },
+    },
+  },
+
+  // 其他配置...
+  "model": "anthropic/claude-3-5-sonnet-20241022",
+  "theme": "dark",
+}
