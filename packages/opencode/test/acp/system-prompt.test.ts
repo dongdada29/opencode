@@ -75,7 +75,9 @@ describe("ACP System Prompt via _meta", () => {
     // Mock loadSessionMode
     acp["loadSessionMode"] = async () => ({
       models: [{ providerID: "test", modelID: "test" }] as any,
-      modes: []
+      modes: [],
+      sessionId: "test-session",
+      _meta: {}
     })
 
     const mockConfig = {
@@ -115,7 +117,9 @@ describe("ACP System Prompt via _meta", () => {
 
     acp["loadSessionMode"] = async () => ({
       models: [{ providerID: "test", modelID: "test" }] as any,
-      modes: []
+      modes: [],
+      sessionId: "test-session",
+      _meta: {}
     })
 
     const mockConfig = {
@@ -153,7 +157,9 @@ describe("ACP System Prompt via _meta", () => {
 
     acp["loadSessionMode"] = async () => ({
       models: [{ providerID: "test", modelID: "test" }] as any,
-      modes: []
+      modes: [],
+      sessionId: "test-session",
+      _meta: {}
     })
 
     const mockConfig = {
@@ -189,7 +195,9 @@ describe("ACP System Prompt via _meta", () => {
 
     acp["loadSessionMode"] = async () => ({
       models: [{ providerID: "test", modelID: "test" }] as any,
-      modes: []
+      modes: [],
+      sessionId: "test-session",
+      _meta: {}
     })
 
     const mockConfig = {
@@ -225,7 +233,9 @@ describe("ACP System Prompt via _meta", () => {
 
     acp["loadSessionMode"] = async () => ({
       models: [{ providerID: "test", modelID: "test" }] as any,
-      modes: []
+      modes: [],
+      sessionId: "test-session",
+      _meta: {}
     })
 
     const mockConfig = {
