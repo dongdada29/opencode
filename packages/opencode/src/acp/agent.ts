@@ -432,7 +432,7 @@ export namespace ACP {
         },
         authMethods: [authMethod],
         agentInfo: {
-          name: "Nuwaxcode",
+          name: "NuwaxCode",
           version: Installation.VERSION,
         },
       }
@@ -1065,6 +1065,7 @@ export namespace ACP {
             providerID: model.providerID,
             modelID: model.modelID,
           },
+          system: typeof session.systemPrompt === "string" ? session.systemPrompt : session.systemPrompt?.append,
           parts,
           agent,
           directory,
