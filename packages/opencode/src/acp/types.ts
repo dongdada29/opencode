@@ -11,6 +11,8 @@ export interface ACPSessionState {
     modelID: string
   }
   modeId?: string
+  /** System prompt passed via ACP _meta.systemPrompt */
+  systemPrompt?: string | { append: string }
 }
 
 export interface ACPConfig {

@@ -401,18 +401,18 @@ export namespace ACP {
       log.info("initialize", { protocolVersion: params.protocolVersion })
 
       const authMethod: AuthMethod = {
-        description: "Run `opencode auth login` in the terminal",
-        name: "Login with opencode",
-        id: "opencode-login",
+        description: "Run `nuwaxcode auth login` in the terminal",
+        name: "Login with nuwaxcode",
+        id: "nuwaxcode-login",
       }
 
       // If client supports terminal-auth capability, use that instead.
       if (params.clientCapabilities?._meta?.["terminal-auth"] === true) {
         authMethod._meta = {
           "terminal-auth": {
-            command: "opencode",
+            command: "nuwaxcode",
             args: ["auth", "login"],
-            label: "OpenCode Login",
+            label: "NuwaxCode Login",
           },
         }
       }
@@ -432,7 +432,7 @@ export namespace ACP {
         },
         authMethods: [authMethod],
         agentInfo: {
-          name: "OpenCode",
+          name: "Nuwaxcode",
           version: Installation.VERSION,
         },
       }
@@ -447,11 +447,14 @@ export namespace ACP {
       try {
         const model = await defaultModel(this.config, directory)
 
+        // Extract systemPrompt from ACP meta (similar to claude-code-acp pattern)
+        const systemPrompt = (params._meta as { systemPrompt?: string | { append: string } } | undefined)?.systemPrompt
+
         // Store ACP session state
-        const state = await this.sessionManager.create(params.cwd, params.mcpServers, model)
+        const state = await this.sessionManager.create(params.cwd, params.mcpServers, model, systemPrompt)
         const sessionId = state.id
 
-        log.info("creating_session", { sessionId, mcpServers: params.mcpServers.length })
+        log.info("creating_session", { sessionId, mcpServers: params.mcpServers.length, hasSystemPrompt: !!systemPrompt })
 
         const load = await this.loadSessionMode({
           cwd: directory,
