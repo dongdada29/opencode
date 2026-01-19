@@ -145,7 +145,7 @@ for (const item of targets) {
     },
     entrypoints: ["./src/index.ts", parserWorker, workerPath],
     define: {
-      OPENCODE_VERSION: `'${Script.version}'`,
+      OPENCODE_VERSION: `'${pkg.version}'`,
       OTUI_TREE_SITTER_WORKER_PATH: bunfsRoot + workerRelativePath,
       OPENCODE_WORKER_PATH: workerPath,
       OPENCODE_CHANNEL: `'${Script.channel}'`,
@@ -158,7 +158,7 @@ for (const item of targets) {
     JSON.stringify(
       {
         name,
-        version: "1.1.26",
+        version: pkg.version,
         os: [item.os],
         cpu: [item.arch],
       },
