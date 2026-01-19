@@ -432,7 +432,7 @@ export namespace ACP {
         },
         authMethods: [authMethod],
         agentInfo: {
-          name: "NuwaxCode",
+          name: "OpenCode",
           version: Installation.VERSION,
         },
       }
