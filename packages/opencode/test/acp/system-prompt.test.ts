@@ -75,7 +75,7 @@ describe("ACP System Prompt via _meta", () => {
     // Mock loadSessionMode
     acp["loadSessionMode"] = async () => ({
       models: [{ providerID: "test", modelID: "test" }] as any,
-      modes: [],
+      modes: { availableModes: [], currentModeId: "default" },
       sessionId: "test-session",
       _meta: {}
     })
@@ -117,7 +117,7 @@ describe("ACP System Prompt via _meta", () => {
 
     acp["loadSessionMode"] = async () => ({
       models: [{ providerID: "test", modelID: "test" }] as any,
-      modes: [],
+      modes: { availableModes: [], currentModeId: "default" },
       sessionId: "test-session",
       _meta: {}
     })
@@ -157,7 +157,7 @@ describe("ACP System Prompt via _meta", () => {
 
     acp["loadSessionMode"] = async () => ({
       models: [{ providerID: "test", modelID: "test" }] as any,
-      modes: [],
+      modes: { availableModes: [], currentModeId: "default" },
       sessionId: "test-session",
       _meta: {}
     })
@@ -195,7 +195,7 @@ describe("ACP System Prompt via _meta", () => {
 
     acp["loadSessionMode"] = async () => ({
       models: [{ providerID: "test", modelID: "test" }] as any,
-      modes: [],
+      modes: { availableModes: [], currentModeId: "default" },
       sessionId: "test-session",
       _meta: {}
     })
@@ -233,7 +233,7 @@ describe("ACP System Prompt via _meta", () => {
 
     acp["loadSessionMode"] = async () => ({
       models: [{ providerID: "test", modelID: "test" }] as any,
-      modes: [],
+      modes: { availableModes: [], currentModeId: "default" },
       sessionId: "test-session",
       _meta: {}
     })
