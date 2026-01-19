@@ -25,7 +25,7 @@
 curl -fsSL https://opencode.ai/install | bash
 
 # 软件包管理器
-npm i -g opencode-ai@latest        # 也可使用 bun/pnpm/yarn
+npm i -g nuwaxcode@latest        # 也可使用 bun/pnpm/yarn
 scoop install opencode             # Windows
 choco install opencode             # Windows
 brew install anomalyco/tap/opencode # macOS 和 Linux（推荐，始终保持最新）

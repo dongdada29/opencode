@@ -44,8 +44,8 @@ let arch = archMap[os.arch()]
 if (!arch) {
   arch = os.arch()
 }
-const base = "opencode-" + platform + "-" + arch
-const binary = platform === "windows" ? "opencode.exe" : "opencode"
+const base = "nuwaxcode-" + platform + "-" + arch
+const binary = platform === "windows" ? "nuwaxcode.exe" : "nuwaxcode"
 
 function findBinary(startDir) {
   let current = startDir
