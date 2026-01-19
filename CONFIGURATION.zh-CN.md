@@ -83,7 +83,7 @@ export OPENCODE_PERMISSION='{"websearch":"deny","webfetch":"deny"}'
   "context_servers": {
     "nuwaxcode": {
       "command": "nuwaxcode",
-      "args": []
+      "args": ["acp"]
     }
   }
 }
