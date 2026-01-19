@@ -67,3 +67,39 @@ export OPENCODE_PERMISSION='{"websearch":"deny","webfetch":"deny"}'
 - `"allow"`: 允许 (默认)
 - `"deny"`: 拒绝 (禁用)
 - `"ask"`: 询问用户 (CLI 交互模式下有效)
+
+---
+
+## Zed 编辑器调试配置
+
+要在 Zed 中使用并调试 Nuwaxcode，请修改 Zed 的配置文件 (`cmd+,` 打开 `settings.json`)。
+
+### 1. 配置 Context Server
+
+添加 `nuwaxcode` 到 `context_servers`：
+
+```json
+{
+  "context_servers": {
+    "nuwaxcode": {
+      "command": "nuwaxcode",
+      "args": []
+    }
+  }
+}
+```
+
+> 注意：请确保 `nuwaxcode` 已在您的 PATH 环境中。如果未安装到 PATH，请使用绝对路径，例如 `/Users/yourname/.bun/bin/nuwaxcode`。
+
+### 2. 查看调试日志
+
+Nuwaxcode (Opencode) 的日志默认存储在 XDG 数据目录中。在 macOS/Linux 上通常位于 `~/.local/share/opencode/log/`。
+
+您可以在终端中实时监控日志以进行调试：
+
+```bash
+# 查看实时日志
+tail -f ~/.local/share/opencode/log/nuwaxcode.log
+```
+
+如果遇到连接问题或 Agent 行为异常，日志通常会包含详细的错误堆栈和运行状态信息。
