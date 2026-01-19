@@ -89,6 +89,8 @@ OpenCode 内置两种 Agent，可用 `Tab` 键快速切换：
 
 更多配置说明请查看我们的 [**官方文档**](https://opencode.ai/docs)。
 
+关于 **高级配置**（包括 ACP Meta 配置和禁用联网工具），请参阅 [本地配置指南](./CONFIGURATION.zh-CN.md)。
+
 ### 参与贡献
 
 如有兴趣贡献代码，请在提交 PR 前阅读 [贡献指南 (Contributing Docs)](./CONTRIBUTING.md)。
