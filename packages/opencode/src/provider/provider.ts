@@ -87,8 +87,8 @@ export namespace Provider {
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
     async anthropic() {
-      const baseURL = Env.get("OPENCODE_API_BASE") ?? Env.get("ANTHROPIC_BASE_URL")
-      const apiKey = Env.get("OPENCODE_API_KEY") ?? Env.get("ANTHROPIC_API_KEY")
+      const baseURL = Env.get("OPENCODE_ANTHROPIC_API_BASE") ?? Env.get("ANTHROPIC_BASE_URL")
+      const apiKey = Env.get("OPENCODE_ANTHROPIC_API_KEY") ?? Env.get("ANTHROPIC_API_KEY")
       const autoload = !!(baseURL || apiKey)
 
       return {
@@ -126,8 +126,10 @@ export namespace Provider {
       }
     },
     openai: async () => {
-      const baseURL = Env.get("OPENCODE_API_BASE") ?? Env.get("OPENAI_BASE_URL")
-      const apiKey = Env.get("OPENCODE_API_KEY") ?? Env.get("OPENAI_API_KEY")
+      const baseURL =
+        Env.get("OPENCODE_OPENAI_API_BASE") ?? Env.get("OPENCODE_API_BASE") ?? Env.get("OPENAI_BASE_URL")
+      const apiKey =
+        Env.get("OPENCODE_OPENAI_API_KEY") ?? Env.get("OPENCODE_API_KEY") ?? Env.get("OPENAI_API_KEY")
       const autoload = !!(baseURL || apiKey)
 
       return {
