@@ -87,13 +87,19 @@ export namespace Provider {
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
     async anthropic() {
+      const baseURL = Env.get("OPENCODE_API_BASE") ?? Env.get("ANTHROPIC_BASE_URL")
+      const apiKey = Env.get("OPENCODE_API_KEY") ?? Env.get("ANTHROPIC_API_KEY")
+      const autoload = !!(baseURL || apiKey)
+
       return {
-        autoload: false,
+        autoload,
         options: {
           headers: {
             "anthropic-beta":
               "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
           },
+          ...(baseURL ? { baseURL } : {}),
+          ...(apiKey ? { apiKey } : {}),
         },
       }
     },
