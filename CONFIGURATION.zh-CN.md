@@ -1,5 +1,13 @@
 # Nuwaxcode 配置指南
 
+## 安装
+
+首先，请通过 npm 全局安装 Nuwaxcode：
+
+```bash
+npm install -g @xagi/nuwaxcode@latest
+```
+
 ## ACP Meta 配置
 
 Nuwaxcode 支持通过 ACP (Agent Client Protocol) 的 `_meta` 字段传入额外的会话配置信息。
