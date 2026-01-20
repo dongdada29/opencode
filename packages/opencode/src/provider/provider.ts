@@ -533,19 +533,39 @@ export namespace Provider {
           ...(apiKey ? { apiKey } : {}),
         },
         getModel: autoload
-          ? async (modelID: string, _options: unknown) => {
+          ? async (sdk: any, modelID: string, _options: unknown) => {
               try {
-                log.info("loading openai-compatible model provider", { modelID })
-                const { createOpenAICompatible } = await import("@ai-sdk/openai-compatible")
-                const provider = createOpenAICompatible({
-                  name: "openai-compatible",
-                  baseURL: baseURL!,
-                  apiKey: apiKey!,
-                })
-                log.info("created openai-compatible provider instance")
-                const model = provider.chatModel(modelID)
-                log.info("created openai-compatible chat model", { modelID })
-                return model
+                // sdk is already initialized with baseURL and apiKey by getSDK
+                const safeKey = apiKey ? (apiKey.slice(0, 3) + "..." + apiKey.slice(-4)) : "undefined"
+                log.info("loading openai-compatible model provider", { modelID, baseURL, apiKey: safeKey })
+                
+                // Inspecting the SDK object for debugging
+                // log.info("sdk keys", { keys: Object.keys(sdk || {}) })
+
+                // Providing fallback if sdk structure is unexpected
+                if (typeof sdk === 'function' && typeof sdk.chatModel === 'function') {
+                    // It might be a provider instance directly? No, createOpenAICompatible returns an object with methods usually?
+                    // Let's assume standard AI SDK provider interface
+                     log.info("using sdk.chatModel")
+                     return sdk.chatModel(modelID)
+                } else if (typeof sdk === 'function') {
+                    // Some providers are just functions you call with modelID
+                     log.info("using sdk as function")
+                     return sdk(modelID)
+                } else if (sdk && sdk.languageModel) {
+                     log.info("using sdk.languageModel")
+                     return sdk.languageModel(modelID)
+                } else {
+                     // Fallback to recreating if sdk is not what we expect (though getSDK should have returned the right thing)
+                     log.warn("sdk does not look like a provider, recreating")
+                     const { createOpenAICompatible } = await import("@ai-sdk/openai-compatible")
+                     const provider = createOpenAICompatible({
+                        name: "openai-compatible",
+                        baseURL: baseURL!,
+                        apiKey: apiKey!,
+                     })
+                     return provider.chatModel(modelID)
+                }
               } catch (e: any) {
                 log.error("failed to load openai-compatible model", { error: e.message, stack: e.stack })
                 throw e
