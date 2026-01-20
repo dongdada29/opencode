@@ -148,6 +148,17 @@ export namespace LLM {
           OUTPUT_TOKEN_MAX,
         )
 
+    if (Log.file()) {
+      Log.raw(`[${new Date().toISOString()}] Model Configuration:
+Provider: ${input.model.providerID}
+Model: ${input.model.id}
+Temperature: ${params.temperature ?? "N/A"}
+TopP: ${params.topP ?? "N/A"}
+TopK: ${params.topK ?? "N/A"}
+Options: ${JSON.stringify(params.options, null, 2)}
+`)
+    }
+
     const tools = await resolveTools(input)
 
     // LiteLLM and some Anthropic proxies require the tools parameter to be present

@@ -69,7 +69,7 @@ const cli = yargs(hideBin(process.argv))
         if (Installation.isLocal()) return "DEBUG"
         return "INFO"
       })(),
-      dir: opts.logDir as string | undefined,
+      dir: (opts.logDir as string | undefined) ?? process.env.OPENCODE_LOG_DIR,
     })
 
     process.env.AGENT = "1"

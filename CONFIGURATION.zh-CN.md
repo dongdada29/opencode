@@ -103,3 +103,55 @@ tail -f ~/.local/share/opencode/log/nuwaxcode.log
 ```
 
 如果遇到连接问题或 Agent 行为异常，日志通常会包含详细的错误堆栈和运行状态信息。
+
+---
+
+## System Prompt 与 模型配置日志
+
+为了方便调试和审计，Nuwaxcode 支持将完整的 System Prompt（系统提示词）和当前生效的 Model Configuration（模型配置）记录到本地日志文件中。
+
+### 启用方式
+
+#### 方式一：CLI 参数
+
+在启动 CLI 时，使用 `--log-dir` 参数指定日志存储目录：
+
+```bash
+nuwaxcode run "hello" --log-dir ./logs
+```
+
+#### 方式二：环境变量 (默认配置)
+
+如果希望默认开启日志并指定目录，可以设置环境变量 `OPENCODE_LOG_DIR`：
+
+```bash
+export OPENCODE_LOG_DIR="./logs"
+nuwaxcode run "hello"
+```
+
+### 日志文件
+
+日志文件将按日期生成，例如 `nuwaxcode_2026_01_20.log`。
+
+### 日志内容示例
+
+日志中将包含以下关键信息：
+
+1.  **System Prompt**: 完整的系统提示词，包含所有注入的上下文和规则。
+2.  **Model Configuration**: 当前调用的模型参数（Provider, Model ID, Temperature 等）。
+
+```text
+[2026-01-20T08:50:48.712Z] System Prompt:
+You are opencode, an interactive CLI tool ...
+...
+
+[2026-01-20T08:50:48.713Z] Model Configuration:
+Provider: opencode
+Model: big-pickle
+Temperature: N/A
+TopP: N/A
+TopK: N/A
+Options: {
+  "reasoningEffort": "minimal"
+}
+```
