@@ -100,7 +100,6 @@ export namespace Provider {
           },
           ...(baseURL ? { baseURL } : {}),
           ...(apiKey ? { apiKey } : {}),
-          ...(apiKey ? { apiKey } : {}),
         },
         getModel: autoload
           ? async (sdk: any, modelID: string, _options: unknown) => {
@@ -132,6 +131,56 @@ export namespace Provider {
             }
           : undefined,
       }
+    },
+    async "anthropic-compatible"() {
+       // Re-use logic for anthropic but allows for a distinct provider ID
+       const baseURL = Env.get("OPENCODE_ANTHROPIC_API_BASE") ?? Env.get("ANTHROPIC_BASE_URL")
+       const apiKey = Env.get("OPENCODE_ANTHROPIC_API_KEY") ?? Env.get("ANTHROPIC_API_KEY")
+       const autoload = !!(baseURL || apiKey)
+ 
+       return {
+         autoload,
+         options: {
+           headers: {
+             "anthropic-beta":
+               "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+           },
+           ...(baseURL ? { baseURL } : {}),
+           ...(apiKey ? { apiKey } : {}),
+         },
+         getModel: autoload
+           ? async (sdk: any, modelID: string, _options: unknown) => {
+               try {
+                 const safeKey = apiKey ? (apiKey.slice(0, 3) + "..." + apiKey.slice(-4)) : "undefined"
+                 log.info("loading anthropic-compatible model provider", { modelID, baseURL, apiKey: safeKey })
+                 
+                 // Reuse anthropic creation logic
+                 if (typeof sdk === 'function' && typeof sdk.languageModel === 'function') {
+                      return sdk.languageModel(modelID)
+                 } else if (typeof sdk === 'function') {
+                      return sdk(modelID)
+                 } else {
+                      log.warn("sdk does not look like a provider, recreating", { type: typeof sdk })
+                      const { createAnthropic } = await import("@ai-sdk/anthropic")
+                      const provider = createAnthropic({
+                         // allow specifying specific name for compatible provider? 
+                         // createAnthropic options usually don't take 'name' but we pass options to it
+                         baseURL: baseURL!,
+                         apiKey: apiKey!,
+                          headers: {
+                             "anthropic-beta":
+                               "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+                           },
+                      })
+                      return provider.languageModel(modelID)
+                 }
+               } catch (e: any) {
+                 log.error("failed to load anthropic-compatible model", { error: e.message, stack: e.stack })
+                 throw e
+               }
+             }
+           : undefined,
+       }
     },
     async opencode(input) {
       const hasKey = await (async () => {
@@ -1101,6 +1150,59 @@ export namespace Provider {
             }
           } catch (e: any) {
              log.error("failed to create dynamic anthropic provider", { error: e.message })
+          }
+          continue
+        }
+
+
+        // For anthropic-compatible, allow dynamic provider creation without database entry
+        if (providerID === "anthropic-compatible") {
+          try {
+            const result = await fn(undefined as any)
+            log.info("anthropic-compatible loader result", { autoload: result?.autoload })
+            if (result && result.autoload) {
+              const models: Record<string, Model> = {}
+              const envModel = Env.get("OPENCODE_MODEL")
+              if (envModel && envModel.startsWith("anthropic-compatible/")) {
+                const modelID = envModel.split("/")[1]
+                if (modelID) {
+                   models[modelID] = {
+                    id: modelID,
+                    providerID: "anthropic-compatible",
+                    name: modelID,
+                    status: "active",
+                    release_date: new Date().toISOString().split("T")[0],
+                    api: { id: modelID, url: "", npm: "@ai-sdk/anthropic" },
+                    capabilities: {
+                       temperature: true,
+                       reasoning: false,
+                       attachment: false,
+                       toolcall: false,
+                       input: { text: true, audio: false, image: false, video: false, pdf: false },
+                       output: { text: true, audio: false, image: false, video: false, pdf: false },
+                       interleaved: false,
+                    },
+                    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                    limit: { context: 128000, output: 4096 },
+                    options: {},
+                    headers: {}
+                   }
+                   log.info("pre-populated dynamic anthropic-compatible model", { modelID })
+                }
+              }
+              providers[providerID] = {
+                id: providerID,
+                name: "Anthropic Compatible",
+                source: "custom",
+                env: [],
+                options: result.options ?? {},
+                models: models,
+              }
+              if (result.getModel) modelLoaders[providerID] = result.getModel
+              log.info("created dynamic anthropic-compatible provider", { providerID })
+            }
+          } catch (e: any) {
+             log.error("failed to create dynamic anthropic-compatible provider", { error: e.message })
           }
           continue
         }
