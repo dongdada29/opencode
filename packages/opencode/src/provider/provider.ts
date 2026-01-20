@@ -519,6 +519,41 @@ export namespace Provider {
         },
       }
     },
+    "openai-compatible": async () => {
+      const baseURL =
+        Env.get("OPENCODE_OPENAI_API_BASE") ?? Env.get("OPENCODE_API_BASE") ?? Env.get("OPENAI_BASE_URL")
+      const apiKey =
+        Env.get("OPENCODE_OPENAI_API_KEY") ?? Env.get("OPENCODE_API_KEY") ?? Env.get("OPENAI_API_KEY")
+      const autoload = !!(baseURL && apiKey)
+
+      return {
+        autoload,
+        options: {
+          ...(baseURL ? { baseURL } : {}),
+          ...(apiKey ? { apiKey } : {}),
+        },
+        getModel: autoload
+          ? async (modelID: string, _options: unknown) => {
+              try {
+                log.info("loading openai-compatible model provider", { modelID })
+                const { createOpenAICompatible } = await import("@ai-sdk/openai-compatible")
+                const provider = createOpenAICompatible({
+                  name: "openai-compatible",
+                  baseURL: baseURL!,
+                  apiKey: apiKey!,
+                })
+                log.info("created openai-compatible provider instance")
+                const model = provider.chatModel(modelID)
+                log.info("created openai-compatible chat model", { modelID })
+                return model
+              } catch (e: any) {
+                log.error("failed to load openai-compatible model", { error: e.message, stack: e.stack })
+                throw e
+              }
+            }
+          : undefined,
+      }
+    },
   }
 
   export const Model = z
@@ -895,9 +930,78 @@ export namespace Provider {
     }
 
     for (const [providerID, fn] of Object.entries(CUSTOM_LOADERS)) {
-      if (disabled.has(providerID)) continue
+      log.info("processing custom loader", { providerID })
+      if (disabled.has(providerID)) {
+        log.info("custom loader disabled", { providerID })
+        continue
+      }
       const data = database[providerID]
       if (!data) {
+        // For openai-compatible, allow dynamic provider creation without database entry
+        if (providerID === "openai-compatible") {
+          try {
+            const result = await fn(undefined as any)
+            log.info("openai-compatible loader result", { autoload: result?.autoload })
+            if (result && result.autoload) {
+              const models: Record<string, Model> = {}
+              const envModel = Env.get("OPENCODE_MODEL")
+              // Pre-populate model from env if it belongs to openai-compatible
+              if (envModel && envModel.startsWith("openai-compatible/")) {
+                const modelID = envModel.split("/")[1]
+                if (modelID) {
+                   models[modelID] = {
+                    id: modelID,
+                    providerID: "openai-compatible",
+                    name: modelID,
+                    status: "active",
+                    release_date: new Date().toISOString().split("T")[0],
+                    api: {
+                      id: modelID,
+                      url: "",
+                      npm: "@ai-sdk/openai-compatible",
+                    },
+                    capabilities: {
+                       temperature: true,
+                       reasoning: false,
+                       attachment: false,
+                       toolcall: false,
+                       input: { text: true, audio: false, image: false, video: false, pdf: false },
+                       output: { text: true, audio: false, image: false, video: false, pdf: false },
+                       interleaved: false,
+                    },
+                    cost: {
+                        input: 0,
+                        output: 0,
+                        cache: { read: 0, write: 0 }
+                    },
+                    limit: {
+                        context: 128000,
+                        output: 4096
+                    },
+                    options: {},
+                    headers: {}
+                   }
+                   log.info("pre-populated dynamic model", { modelID })
+                }
+              }
+
+              // Create a minimal provider entry for openai-compatible
+              providers[providerID] = {
+                id: providerID,
+                name: "OpenAI Compatible",
+                source: "custom",
+                env: [],
+                options: result.options ?? {},
+                models: models,
+              }
+              if (result.getModel) modelLoaders[providerID] = result.getModel
+              log.info("created dynamic provider", { providerID })
+            }
+          } catch (e: any) {
+             log.error("failed to create dynamic openai-compatible provider", { error: e.message })
+          }
+          continue
+        }
         log.error("Provider does not exist in model list " + providerID)
         continue
       }
