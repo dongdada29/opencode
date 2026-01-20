@@ -1,9 +1,12 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.1.36",
-  "name": "nuwaxcode",
+  "version": "1.1.38",
+  "name": "@xagi/nuwaxcode",
   "type": "module",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "test": "bun test",
@@ -116,10 +119,10 @@
     "zod-to-json-schema": "3.24.5"
   },
   "optionalDependencies": {
-    "nuwaxcode-darwin-arm64": "1.1.36",
-    "nuwaxcode-darwin-x64": "1.1.36",
-    "nuwaxcode-linux-arm64": "1.1.36",
-    "nuwaxcode-linux-x64": "1.1.36",
-    "nuwaxcode-windows-x64": "1.1.36"
+    "@xagi/nuwaxcode-darwin-arm64": "1.1.38",
+    "@xagi/nuwaxcode-darwin-x64": "1.1.38",
+    "@xagi/nuwaxcode-linux-arm64": "1.1.38",
+    "@xagi/nuwaxcode-linux-x64": "1.1.38",
+    "@xagi/nuwaxcode-windows-x64": "1.1.38"
   }
 }
