@@ -120,12 +120,19 @@ export namespace Provider {
       }
     },
     openai: async () => {
+      const baseURL = Env.get("OPENCODE_API_BASE") ?? Env.get("OPENAI_BASE_URL")
+      const apiKey = Env.get("OPENCODE_API_KEY") ?? Env.get("OPENAI_API_KEY")
+      const autoload = !!(baseURL || apiKey)
+
       return {
-        autoload: false,
+        autoload,
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
           return sdk.responses(modelID)
         },
-        options: {},
+        options: {
+          ...(baseURL ? { baseURL } : {}),
+          ...(apiKey ? { apiKey } : {}),
+        },
       }
     },
     "github-copilot": async () => {
