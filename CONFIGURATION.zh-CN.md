@@ -162,18 +162,30 @@ Options: {
 
 Nuwaxcode 支持通过环境变量配置默认的模型连接参数，方便在不同环境（如 Docker、CI/CD）中快速切换。
 
-| 环境变量            | 说明                                                  | 示例                                                       |
-| :------------------ | :---------------------------------------------------- | :--------------------------------------------------------- |
-| `OPENCODE_MODEL`    | 默认此模型 ID。当 CLI 未指定 `-m` 时生效。            | `openai/gpt-4o`, `anthropic/claude-3-5-sonnet-20240620`    |
-| `OPENCODE_API_BASE` | OpenAI 兼容接口的 Base URL (也支持 Anthropic)。       | `https://api.deepseek.com/v1`, `http://localhost:11434/v1` |
-| `OPENCODE_API_KEY`  | API Key (优先级高于配置文件，支持 OpenAI/Anthropic)。 | `sk-proj-...`                                              |
+| 环境变量         | 说明                                       | 示例            |
+| :--------------- | :----------------------------------------- | :-------------- |
+| `OPENCODE_MODEL` | 默认此模型 ID。当 CLI 未指定 `-m` 时生效。 | `openai/gpt-4o` |
+
+### OpenAI 兼容协议 (OpenAI, DeepSeek, Ollama 等)
+
+| 环境变量                   | 说明                     | 示例                          | 备注                   |
+| :------------------------- | :----------------------- | :---------------------------- | :--------------------- |
+| `OPENCODE_OPENAI_API_BASE` | OpenAI 兼容接口 Base URL | `https://api.deepseek.com/v1` | 兼容 `OPENAI_BASE_URL` |
+| `OPENCODE_OPENAI_API_KEY`  | API Key                  | `sk-proj-...`                 | 兼容 `OPENAI_API_KEY`  |
+
+### Anthropic 协议 (Claude)
+
+| 环境变量                      | 说明                        | 示例                        | 备注                      |
+| :---------------------------- | :-------------------------- | :-------------------------- | :------------------------ |
+| `OPENCODE_ANTHROPIC_API_BASE` | Anthropic 兼容接口 Base URL | `https://your-proxy.com/v1` | 兼容 `ANTHROPIC_BASE_URL` |
+| `OPENCODE_ANTHROPIC_API_KEY`  | API Key                     | `sk-ant-...`                | 兼容 `ANTHROPIC_API_KEY`  |
 
 **示例场景：连接本地 Ollama**
 
 ```bash
 export OPENCODE_MODEL="openai/llama3"
-export OPENCODE_API_BASE="http://localhost:11434/v1"
-export OPENCODE_API_KEY="ollama"  # Ollama 通常不需要 key，但某些 SDK 可能要求非空
+export OPENCODE_OPENAI_API_BASE="http://localhost:11434/v1"
+export OPENCODE_OPENAI_API_KEY="ollama"
 
 nuwaxcode run "System check"
 ```
