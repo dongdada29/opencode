@@ -100,7 +100,37 @@ export namespace Provider {
           },
           ...(baseURL ? { baseURL } : {}),
           ...(apiKey ? { apiKey } : {}),
+          ...(apiKey ? { apiKey } : {}),
         },
+        getModel: autoload
+          ? async (sdk: any, modelID: string, _options: unknown) => {
+              try {
+                const safeKey = apiKey ? (apiKey.slice(0, 3) + "..." + apiKey.slice(-4)) : "undefined"
+                log.info("loading anthropic model provider", { modelID, baseURL, apiKey: safeKey })
+                
+                if (typeof sdk === 'function' && typeof sdk.languageModel === 'function') {
+                     return sdk.languageModel(modelID)
+                } else if (typeof sdk === 'function') {
+                     return sdk(modelID)
+                } else {
+                     log.warn("sdk does not look like a provider, recreating", { type: typeof sdk })
+                     const { createAnthropic } = await import("@ai-sdk/anthropic")
+                     const provider = createAnthropic({
+                        baseURL: baseURL!,
+                        apiKey: apiKey!,
+                         headers: {
+                            "anthropic-beta":
+                              "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+                          },
+                     })
+                     return provider.languageModel(modelID)
+                }
+              } catch (e: any) {
+                log.error("failed to load anthropic model", { error: e.message, stack: e.stack })
+                throw e
+              }
+            }
+          : undefined,
       }
     },
     async opencode(input) {
@@ -1005,8 +1035,8 @@ export namespace Provider {
                 }
               }
 
-              // Create a minimal provider entry for openai-compatible
-              providers[providerID] = {
+                  // Create a minimal provider entry for openai-compatible
+               providers[providerID] = {
                 id: providerID,
                 name: "OpenAI Compatible",
                 source: "custom",
@@ -1022,9 +1052,63 @@ export namespace Provider {
           }
           continue
         }
+
+        // For anthropic, allow dynamic provider creation without database entry
+        if (providerID === "anthropic") {
+          try {
+            const result = await fn(undefined as any)
+            log.info("anthropic loader result", { autoload: result?.autoload })
+            if (result && result.autoload) {
+              const models: Record<string, Model> = {}
+              const envModel = Env.get("OPENCODE_MODEL")
+              if (envModel && envModel.startsWith("anthropic/")) {
+                const modelID = envModel.split("/")[1]
+                if (modelID) {
+                   models[modelID] = {
+                    id: modelID,
+                    providerID: "anthropic",
+                    name: modelID,
+                    status: "active",
+                    release_date: new Date().toISOString().split("T")[0],
+                    api: { id: modelID, url: "", npm: "@ai-sdk/anthropic" },
+                    capabilities: {
+                       temperature: true,
+                       reasoning: false,
+                       attachment: false,
+                       toolcall: false,
+                       input: { text: true, audio: false, image: false, video: false, pdf: false },
+                       output: { text: true, audio: false, image: false, video: false, pdf: false },
+                       interleaved: false,
+                    },
+                    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                    limit: { context: 128000, output: 4096 },
+                    options: {},
+                    headers: {}
+                   }
+                   log.info("pre-populated dynamic anthropic model", { modelID })
+                }
+              }
+              providers[providerID] = {
+                id: providerID,
+                name: "Anthropic",
+                source: "custom",
+                env: [],
+                options: result.options ?? {},
+                models: models,
+              }
+              if (result.getModel) modelLoaders[providerID] = result.getModel
+              log.info("created dynamic anthropic provider", { providerID })
+            }
+          } catch (e: any) {
+             log.error("failed to create dynamic anthropic provider", { error: e.message })
+          }
+          continue
+        }
+
         log.error("Provider does not exist in model list " + providerID)
         continue
       }
+
       const result = await fn(data)
       if (result && (result.autoload || providers[providerID])) {
         if (result.getModel) modelLoaders[providerID] = result.getModel
@@ -1032,6 +1116,38 @@ export namespace Provider {
           source: "custom",
           options: result.options,
         })
+        
+        // Dynamic model injection for existing providers (specifically anthropic)
+        const envModel = Env.get("OPENCODE_MODEL")
+        if (envModel && envModel.startsWith(providerID + "/")) {
+             const modelID = envModel.split("/")[1]
+             if (modelID && providers[providerID] && !providers[providerID].models[modelID]) {
+                  if (providerID === "anthropic") {
+                      providers[providerID].models[modelID] = {
+                        id: modelID,
+                        providerID: providerID,
+                        name: modelID,
+                        status: "active",
+                        release_date: new Date().toISOString().split("T")[0],
+                        api: { id: modelID, url: "", npm: "@ai-sdk/anthropic" },
+                        capabilities: {
+                           temperature: true,
+                           reasoning: false,
+                           attachment: false,
+                           toolcall: false,
+                           input: { text: true, audio: false, image: false, video: false, pdf: false },
+                           output: { text: true, audio: false, image: false, video: false, pdf: false },
+                           interleaved: false,
+                        },
+                        cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                        limit: { context: 128000, output: 4096 },
+                        options: {},
+                        headers: {}
+                      }
+                      log.info("injected dynamic anthropic model", { modelID })
+                  }
+             }
+        }
       }
     }
 
