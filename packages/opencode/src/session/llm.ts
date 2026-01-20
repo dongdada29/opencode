@@ -92,6 +92,14 @@ export namespace LLM {
       system.length = 0
       system.push(header, rest.join("\n"))
     }
+    
+    l.info("system prompt", {
+       content: system.join("\n\n")
+    })
+
+    if (Log.file()) {
+      Log.raw(`\n[${new Date().toISOString()}] System Prompt:\n${system.join("\n")}\n\n`)
+    }
 
     const variant =
       !input.small && input.model.variants && input.user.variant ? input.model.variants[input.user.variant] : {}

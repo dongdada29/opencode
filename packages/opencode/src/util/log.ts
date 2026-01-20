@@ -44,6 +44,7 @@ export namespace Log {
     print: boolean
     dev?: boolean
     level?: Level
+    dir?: string
   }
 
   let logpath = ""
@@ -55,23 +56,46 @@ export namespace Log {
     return msg.length
   }
 
+  export function raw(msg: string) {
+    write(msg + "\n")
+  }
+
   export async function init(options: Options) {
     if (options.level) level = options.level
-    cleanup(Global.Path.log)
+    const dir = options.dir || Global.Path.log
+    await fs.mkdir(dir, { recursive: true })
+
+    // cleanup(dir) // logic might need adjustment if users manage this dir, but for rotation we can keep it or adjust pattern
     if (options.print) return
-    logpath = path.join(
-      Global.Path.log,
-      options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
-    )
+
+    const date = new Date()
+    const yyyy = date.getFullYear()
+    const MM = String(date.getMonth() + 1).padStart(2, "0")
+    const DD = String(date.getDate()).padStart(2, "0")
+    const filename = `nuwaxcode_${yyyy}_${MM}_${DD}.log`
+
+    logpath = path.join(dir, filename)
+
     const logfile = Bun.file(logpath)
-    await fs.truncate(logpath).catch(() => {})
+    // await fs.truncate(logpath).catch(() => {}) // Don't truncate, append is usually better for day logs, or maybe the user wants overwrite? "log file generation rule is..." implies daily rotation usually means append. I will Append.
     const writer = logfile.writer()
+    flush = async () => {
+      await writer.flush()
+    }
     write = async (msg: any) => {
       const num = writer.write(msg)
+      // writer.flush() // allow buffering, flush explicitly or periodically? or keep flushing?
+      // Auto-flush is safer for now to avoid losing logs on crash, but we need to await it if possible?
+      // If we don't await, it's same as before.
+      // But adding explicit flush on exit helps.
+      // Let's keep auto-flush for real-time logs but ensure we track it?
+      // Actually, if we just set the global flush, we can call it at the end.
       writer.flush()
       return num
     }
   }
+
+  export let flush = async () => {}
 
   async function cleanup(dir: string) {
     const glob = new Bun.Glob("????-??-??T??????.log")

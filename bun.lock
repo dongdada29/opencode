@@ -253,7 +253,7 @@
     },
     "packages/opencode": {
       "name": "@xagi/nuwaxcode",
-      "version": "1.1.38",
+      "version": "1.1.39",
       "bin": {
         "nuwaxcode": "./bin/nuwaxcode",
       },
@@ -352,11 +352,11 @@
         "zod-to-json-schema": "3.24.5",
       },
       "optionalDependencies": {
-        "@xagi/nuwaxcode-darwin-arm64": "1.1.38",
-        "@xagi/nuwaxcode-darwin-x64": "1.1.38",
-        "@xagi/nuwaxcode-linux-arm64": "1.1.38",
-        "@xagi/nuwaxcode-linux-x64": "1.1.38",
-        "@xagi/nuwaxcode-windows-x64": "1.1.38",
+        "@xagi/nuwaxcode-darwin-arm64": "1.1.39",
+        "@xagi/nuwaxcode-darwin-x64": "1.1.39",
+        "@xagi/nuwaxcode-linux-arm64": "1.1.39",
+        "@xagi/nuwaxcode-linux-x64": "1.1.39",
+        "@xagi/nuwaxcode-windows-x64": "1.1.39",
       },
     },
     "packages/plugin": {
@@ -1914,16 +1914,6 @@
     "@webgpu/types": ["@webgpu/types@0.1.54", "", {}, "sha512-81oaalC8LFrXjhsczomEQ0u3jG+TqE6V9QHLA8GNZq/Rnot0KDugu3LhSYSlie8tSdooAN1Hov05asrUUp9qgg=="],
 
     "@xagi/nuwaxcode": ["@xagi/nuwaxcode@workspace:packages/opencode"],
-
-    "@xagi/nuwaxcode-darwin-arm64": ["@xagi/nuwaxcode-darwin-arm64@1.1.38", "", { "os": "darwin", "cpu": "arm64" }, "sha512-Ilzu2qc1MzxeSECNuBXvlFjZ3GJ3kRaBnRmTjRRrek95Q10pLdJbHUuiBu9boZ+FSmy4MCt3gautyV5uiHYJmQ=="],
-
-    "@xagi/nuwaxcode-darwin-x64": ["@xagi/nuwaxcode-darwin-x64@1.1.38", "", { "os": "darwin", "cpu": "x64" }, "sha512-1dn4Nd3GLlqyHetUPSslKpeCC+ZfFWoeId/djsI6gzN+KC9Bbpw9vb12ojnu+RQ2VuK0+6ykzgUvbbVcuLcOaw=="],
-
-    "@xagi/nuwaxcode-linux-arm64": ["@xagi/nuwaxcode-linux-arm64@1.1.38", "", { "os": "linux", "cpu": "arm64" }, "sha512-oZWIurf0JsEvuT0bMmY6rhmZg4p8jiPr2tn7vp9V/trtRZaF0IbJ/e8a72PYhPK53GpCmRu/l2jNeEhIWHeU1A=="],
-
-    "@xagi/nuwaxcode-linux-x64": ["@xagi/nuwaxcode-linux-x64@1.1.38", "", { "os": "linux", "cpu": "x64" }, "sha512-+EY4+5MmLqDoD7o1i3sSR+ERm3hwaCPLKhjHr9W5VD8zL0EeaC952rcQmkA1WsI/MhVSpOYagKtSL2vBaTW4dA=="],
-
-    "@xagi/nuwaxcode-windows-x64": ["@xagi/nuwaxcode-windows-x64@1.1.38", "", { "os": "win32", "cpu": "x64" }, "sha512-WZWDK02aEYPCSKNK8lpk/dFjT4YidKNXrM1NUnGhjhQrJP3Fn0T+EbHP0ZwGlTyouhlpLKeTFeh+MFhV8ID93A=="],
 
     "@zip.js/zip.js": ["@zip.js/zip.js@2.7.62", "", {}, "sha512-OaLvZ8j4gCkLn048ypkZu29KX30r8/OfFF2w4Jo5WXFr+J04J+lzJ5TKZBVgFXhlvSkqNFQdfnY1Q8TMTCyBVA=="],
 

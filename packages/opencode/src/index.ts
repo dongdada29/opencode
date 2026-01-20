@@ -51,6 +51,10 @@ const cli = yargs(hideBin(process.argv))
     describe: "print logs to stderr",
     type: "boolean",
   })
+  .option("log-dir", {
+    describe: "directory to store logs",
+    type: "string",
+  })
   .option("log-level", {
     describe: "log level",
     type: "string",
@@ -65,6 +69,7 @@ const cli = yargs(hideBin(process.argv))
         if (Installation.isLocal()) return "DEBUG"
         return "INFO"
       })(),
+      dir: opts.logDir as string | undefined,
     })
 
     process.env.AGENT = "1"
@@ -155,5 +160,6 @@ try {
   // Most notably, some docker-container-based MCP servers don't handle such signals unless
   // run using `docker run --init`.
   // Explicitly exit to avoid any hanging subprocesses.
+  await Log.flush()
   process.exit()
 }
