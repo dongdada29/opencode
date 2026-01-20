@@ -62,7 +62,7 @@ export namespace Log {
 
   export async function init(options: Options) {
     if (options.level) level = options.level
-    const dir = options.dir
+    const dir = options.dir ?? process.env.OPENCODE_LOG_DIR
     if (!dir) return
 
     await fs.mkdir(dir, { recursive: true })

@@ -85,6 +85,12 @@ export namespace Config {
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
     }
 
+    // OPENCODE_MODEL env var overrides model
+    if (process.env.OPENCODE_MODEL) {
+      result.model = process.env.OPENCODE_MODEL
+      log.debug("loaded model overrides from OPENCODE_MODEL env var", { model: result.model })
+    }
+
     result.agent = result.agent || {}
     result.mode = result.mode || {}
     result.plugin = result.plugin || []
