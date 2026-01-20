@@ -56,6 +56,21 @@ function findBinary(startDir) {
     if (fs.existsSync(modules)) {
       const entries = fs.readdirSync(modules)
       for (const entry of entries) {
+        if (entry === "@xagi") {
+            const scopeDir = path.join(modules, entry)
+            if (fs.existsSync(scopeDir)) {
+                const scopeEntries = fs.readdirSync(scopeDir)
+                for (const scopeEntry of scopeEntries) {
+                    if (!scopeEntry.startsWith(base)) {
+                        continue
+                    }
+                    const candidate = path.join(scopeDir, scopeEntry, "bin", binary)
+                    if (fs.existsSync(candidate)) {
+                        return candidate
+                    }
+                }
+            }
+        }
         if (!entry.startsWith(base)) {
           continue
         }

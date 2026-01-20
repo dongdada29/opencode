@@ -161,6 +161,9 @@ for (const item of targets) {
         version: pkg.version,
         os: [item.os],
         cpu: [item.arch],
+        publishConfig: {
+          access: "public",
+        },
       },
       null,
       2,
