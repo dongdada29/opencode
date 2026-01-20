@@ -162,11 +162,11 @@ Options: {
 
 除了 `OPENCODE_LOG_DIR`，Nuwaxcode 还支持通过环境变量配置默认的模型连接参数，方便在不同环境（如 Docker、CI/CD）中快速切换。
 
-| 环境变量            | 说明                                       | 示例                                                       |
-| :------------------ | :----------------------------------------- | :--------------------------------------------------------- |
-| `OPENCODE_MODEL`    | 默认此模型 ID。当 CLI 未指定 `-m` 时生效。 | `openai/gpt-4o`, `anthropic/claude-3-5-sonnet-20240620`    |
-| `OPENCODE_API_BASE` | OpenAI 兼容接口的 Base URL。               | `https://api.deepseek.com/v1`, `http://localhost:11434/v1` |
-| `OPENCODE_API_KEY`  | API Key (优先级高于配置文件)。             | `sk-proj-...`                                              |
+| 环境变量            | 说明                                                  | 示例                                                       |
+| :------------------ | :---------------------------------------------------- | :--------------------------------------------------------- |
+| `OPENCODE_MODEL`    | 默认此模型 ID。当 CLI 未指定 `-m` 时生效。            | `openai/gpt-4o`, `anthropic/claude-3-5-sonnet-20240620`    |
+| `OPENCODE_API_BASE` | OpenAI 兼容接口的 Base URL (也支持 Anthropic)。       | `https://api.deepseek.com/v1`, `http://localhost:11434/v1` |
+| `OPENCODE_API_KEY`  | API Key (优先级高于配置文件，支持 OpenAI/Anthropic)。 | `sk-proj-...`                                              |
 
 **示例场景：连接本地 Ollama**
 
