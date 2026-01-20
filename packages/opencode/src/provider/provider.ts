@@ -134,7 +134,11 @@ export namespace Provider {
     },
     async "anthropic-compatible"() {
        // Re-use logic for anthropic but allows for a distinct provider ID
-       const baseURL = Env.get("OPENCODE_ANTHROPIC_API_BASE") ?? Env.get("ANTHROPIC_BASE_URL")
+       let baseURL = Env.get("OPENCODE_ANTHROPIC_API_BASE") ?? Env.get("ANTHROPIC_BASE_URL")
+       // Check if baseURL is provided and doesn't end with /v1
+       if (baseURL && !baseURL.endsWith("/v1") && !baseURL.endsWith("/v1/")) {
+         baseURL = baseURL.replace(/\/$/, "") + "/v1"
+       }
        const apiKey = Env.get("OPENCODE_ANTHROPIC_API_KEY") ?? Env.get("ANTHROPIC_API_KEY")
        const autoload = !!(baseURL || apiKey)
  

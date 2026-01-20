@@ -74,22 +74,57 @@ export OPENCODE_PERMISSION='{"websearch":"deny","webfetch":"deny"}'
 
 要在 Zed 中使用并调试 Nuwaxcode，请修改 Zed 的配置文件 (`cmd+,` 打开 `settings.json`)。
 
-### 1. 配置 Context Server
+### 1. 配置 Agent Server
 
-添加 `nuwaxcode` 到 `context_servers`：
+添加 `nuwaxcode` 到 `agent_servers`：
 
+**示例 1：智谱 GLM-4 (Anthropic 兼容协议)**
 ```json
 {
-  "context_servers": {
+  "agent_servers": {
     "nuwaxcode": {
+      "type": "custom",
       "command": "nuwaxcode",
-      "args": ["acp"]
+      "args": ["acp"],
+      "env": {
+        "OPENCODE_MODEL": "anthropic-compatible/glm-4.7",
+        "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/anthropic",
+        "ANTHROPIC_API_KEY": "sk-...",
+        "OPENCODE_LOG_DIR": "/path/to/logs/",
+      },
+      "favorite_models": [],
+      "default_config_options": {},
+      "favorite_config_option_values": {},
     }
   }
 }
 ```
 
-> 注意：请确保 `nuwaxcode` 已在您的 PATH 环境中。如果未安装到 PATH，请使用绝对路径，例如 `/Users/yourname/.bun/bin/nuwaxcode`。
+
+**示例 2：智谱 GLM-4 (OpenAI 兼容协议)**
+
+```json
+{
+  "agent_servers": {
+    "nuwaxcode": {
+      "type": "custom",
+      "command": "nuwaxcode",
+      "args": ["acp"],
+      "env": {
+        "OPENCODE_MODEL": "openai-compatible/glm-4.7",
+        "OPENAI_BASE_URL": "https://open.bigmodel.cn/api/paas/v4/",
+        "OPENAI_API_KEY": "sk-...",
+        "OPENCODE_LOG_DIR": "/path/to/logs/",
+      },
+      "favorite_models": [],
+      "default_config_options": {},
+      "favorite_config_option_values": {},
+    }
+  }
+}
+```
+
+> 注意：请确保 `nuwaxcode` 已在您的 PATH 环境中。
 
 ### 2. 查看调试日志
 
@@ -166,26 +201,36 @@ Nuwaxcode 支持通过环境变量配置默认的模型连接参数，方便在�
 | :--------------- | :----------------------------------------- | :-------------- |
 | `OPENCODE_MODEL` | 默认此模型 ID。当 CLI 未指定 `-m` 时生效。 | `openai/gpt-4o` |
 
-### OpenAI 兼容协议 (OpenAI, DeepSeek, Ollama 等)
+### OpenAI 及其兼容协议 (OpenAI, DeepSeek, Ollama, openai-compatible 等)
 
 | 环境变量                   | 说明                     | 示例                          | 备注                   |
 | :------------------------- | :----------------------- | :---------------------------- | :--------------------- |
 | `OPENCODE_OPENAI_API_BASE` | OpenAI 兼容接口 Base URL | `https://api.deepseek.com/v1` | 兼容 `OPENAI_BASE_URL` |
 | `OPENCODE_OPENAI_API_KEY`  | API Key                  | `sk-proj-...`                 | 兼容 `OPENAI_API_KEY`  |
 
-### Anthropic 协议 (Claude)
+**示例场景：使用 openai-compatible 连接 DeepSeek**
+
+```bash
+export OPENCODE_MODEL="openai-compatible/deepseek-chat"
+export OPENAI_BASE_URL="https://api.deepseek.com/v1"
+export OPENAI_API_KEY="sk-..."
+
+nuwaxcode run "Hello DeepSeek"
+```
+
+### Anthropic 及其兼容协议 (Claude, GLM-4 等)
 
 | 环境变量                      | 说明                        | 示例                        | 备注                      |
 | :---------------------------- | :-------------------------- | :-------------------------- | :------------------------ |
 | `OPENCODE_ANTHROPIC_API_BASE` | Anthropic 兼容接口 Base URL | `https://your-proxy.com/v1` | 兼容 `ANTHROPIC_BASE_URL` |
 | `OPENCODE_ANTHROPIC_API_KEY`  | API Key                     | `sk-ant-...`                | 兼容 `ANTHROPIC_API_KEY`  |
 
-**示例场景：连接本地 Ollama**
+**示例场景：连接智谱 GLM-4 (Anthropic 兼容模式)**
 
 ```bash
-export OPENCODE_MODEL="openai/llama3"
-export OPENCODE_OPENAI_API_BASE="http://localhost:11434/v1"
-export OPENCODE_OPENAI_API_KEY="ollama"
+export OPENCODE_MODEL="anthropic-compatible/glm-4.7"
+export ANTHROPIC_BASE_URL="https://open.bigmodel.cn/api/anthropic"
+export ANTHROPIC_API_KEY="your_api_key"
 
-nuwaxcode run "System check"
+nuwaxcode run "Hello GLM"
 ```
