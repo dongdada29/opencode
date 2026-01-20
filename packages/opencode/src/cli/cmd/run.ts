@@ -261,7 +261,8 @@ export const RunCommand = cmd({
           variant: args.variant,
         })
       } else {
-        const modelParam = args.model ? Provider.parseModel(args.model) : undefined
+        const modelArg = args.model ?? process.env.OPENCODE_MODEL
+        const modelParam = modelArg ? Provider.parseModel(modelArg) : undefined
         await sdk.session.prompt({
           sessionID,
           agent: resolvedAgent,
