@@ -62,7 +62,9 @@ export namespace Log {
 
   export async function init(options: Options) {
     if (options.level) level = options.level
-    const dir = options.dir || Global.Path.log
+    const dir = options.dir
+    if (!dir) return
+
     await fs.mkdir(dir, { recursive: true })
 
     // cleanup(dir) // logic might need adjustment if users manage this dir, but for rotation we can keep it or adjust pattern
