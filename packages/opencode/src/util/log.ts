@@ -74,7 +74,9 @@ export namespace Log {
     const yyyy = date.getFullYear()
     const MM = String(date.getMonth() + 1).padStart(2, "0")
     const DD = String(date.getDate()).padStart(2, "0")
-    const filename = `nuwaxcode_${yyyy}_${MM}_${DD}.log`
+    // Generate a random 6-character suffix to ensure unique log files per session
+    const suffix = Math.random().toString(36).substring(2, 8)
+    const filename = `nuwaxcode_${yyyy}_${MM}_${DD}_${suffix}.log`
 
     logpath = path.join(dir, filename)
 
