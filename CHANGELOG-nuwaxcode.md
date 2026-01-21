@@ -1,0 +1,115 @@
+# Changelog - feat/nuwaxcode 分支
+
+本文档总结了 `feat/nuwaxcode` 分支相对于主分支的主要更改。
+
+## 🎉 主要变更
+
+### 项目重命名
+
+- 将项目从 `opencode` 重命名为 `nuwaxcode`
+- 移除 `@xagi` 命名空间，包名改为 `nuwaxcode`
+- 更新 TUI 和 CLI 品牌标识为 'nuwax' 风格
+
+### 版本发布
+
+- 当前版本: **v1.1.40+**
+- 主要版本迭代: v1.1.27 → v1.1.40
+
+---
+
+## ✨ 新特性
+
+### 环境变量配置支持
+
+- **`OPENCODE_MODEL`**: 支持通过环境变量配置模型
+- **`OPENCODE_LOG_DIR`**: 支持通过环境变量配置日志目录
+- **`OPENCODE_API_BASE`**: 支持自定义 API 基础地址
+- **`OPENCODE_API_KEY`**: 支持通过环境变量配置 API 密钥
+- **Anthropic 环境变量**: 独立支持 Anthropic 相关环境变量配置
+
+### 动态模型加载器
+
+- 添加 OpenAI-compatible 动态模型提供器
+- 添加 Anthropic 动态加载器支持
+- 添加 Anthropic-compatible 动态加载器支持
+
+### 日志系统增强
+
+- 支持通过 `--log-dir` 参数指定日志目录
+- 实现每日日志文件命名规则
+- 添加日志目录配置、每日轮换、显式刷新功能
+- 支持记录系统提示词 (System Prompt)
+- 默认禁用文件日志，除非配置了 log-dir
+
+### ACP 功能增强
+
+- 支持通过 `_meta` 在 ACP 会话创建时传递系统提示词
+- 添加 ACP 系统提示词测试
+- 将系统提示词传递给 agent 调用
+
+### 构建与发布
+
+- 添加 Linux musl libc 支持
+- 更新发布工作流
+
+---
+
+## 🐛 修复
+
+- 修复 OpenAI-compatible 提供器动态加载问题
+- 修复 'require is not defined' 错误 (将入口点转换为 ESM)
+- 修复 `catalog:` 协议导致的安装失败问题 (替换为具体版本号)
+- 隔离 Anthropic 环境变量与通用 opencode API 变量
+- 修复构建依赖问题
+
+---
+
+## 📝 文档
+
+- 添加安装说明
+- 添加配置指南
+- 更新中文配置文档
+- 添加 Zed 调试说明
+- 添加环境变量配置说明（独立章节）
+- 添加旧版环境变量兼容性说明
+
+---
+
+## 🔧 其他更改
+
+- 添加 `.agent` 到 `.gitignore`
+- 升级 Bun 到 1.3.6
+- 更新各项依赖
+- 添加环境变量配置测试
+
+---
+
+## 📋 提交列表
+
+| Commit      | 描述                                                             |
+| ----------- | ---------------------------------------------------------------- |
+| `5460ee74a` | feat: 移除 `@xagi` 命名空间，添加 musl libc 支持，更新发布工作流 |
+| `65909a003` | docs: 添加安装说明                                               |
+| `202fc626c` | fix: 支持 openai/anthropic 兼容模型并更新文档                    |
+| `b2aa930b3` | feat: 添加 anthropic-compatible 动态加载器支持                   |
+| `1d58132b9` | feat: 添加 anthropic 动态加载器支持                              |
+| `3432fd729` | fix: 解决 openai-compatible 提供器动态加载问题                   |
+| `58fe4c7e5` | refactor: 重命名项目为 nuwaxcode，更新元数据                     |
+| `cde6e3c9b` | feat: 添加动态 OpenAI-compatible 模型提供器                      |
+| `6e1babf0d` | test: 添加环境变量配置测试                                       |
+| `cad247ab8` | feat: 支持通过环境变量配置模型和日志目录                         |
+| `7f3c369b8` | feat: 支持 anthropic 环境变量配置                                |
+| `56c046702` | feat: 支持 OPENCODE_API_BASE 和 OPENCODE_API_KEY                 |
+| `caedaf621` | feat: 支持 OPENCODE_MODEL 环境变量                               |
+| `7dbf78cd4` | fix: 默认禁用文件日志                                            |
+| `5028d2a15` | feat: 支持 OPENCODE_LOG_DIR 环境变量                             |
+| `8cbea8543` | feat: 记录系统提示词，版本升级至 v1.1.39                         |
+| `a77897b26` | feat: 增强日志管理系统                                           |
+| `f5e1c585a` | feat: 支持 --log-dir 参数                                        |
+| `5942b827a` | feat: 支持通过 ACP \_meta 传递系统提示词                         |
+| `fbb501fd8` | refactor: 重命名 opencode 为 nuwaxcode                           |
+| `653450621` | feat: 重命名并添加 ACP meta systemPrompt 支持                    |
+
+---
+
+_生成日期: 2026-01-21_

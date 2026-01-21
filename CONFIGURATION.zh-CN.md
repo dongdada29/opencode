@@ -87,6 +87,7 @@ export OPENCODE_PERMISSION='{"websearch":"deny","webfetch":"deny"}'
 添加 `nuwaxcode` 到 `agent_servers`：
 
 **示例 1：智谱 GLM-4 (Anthropic 兼容协议)**
+
 ```json
 {
   "agent_servers": {
@@ -98,16 +99,15 @@ export OPENCODE_PERMISSION='{"websearch":"deny","webfetch":"deny"}'
         "OPENCODE_MODEL": "anthropic-compatible/glm-4.7",
         "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/anthropic",
         "ANTHROPIC_API_KEY": "sk-...",
-        "OPENCODE_LOG_DIR": "/path/to/logs/",
+        "OPENCODE_LOG_DIR": "/path/to/logs/"
       },
       "favorite_models": [],
       "default_config_options": {},
-      "favorite_config_option_values": {},
+      "favorite_config_option_values": {}
     }
   }
 }
 ```
-
 
 **示例 2：智谱 GLM-4 (OpenAI 兼容协议)**
 
@@ -122,11 +122,11 @@ export OPENCODE_PERMISSION='{"websearch":"deny","webfetch":"deny"}'
         "OPENCODE_MODEL": "openai-compatible/glm-4.7",
         "OPENAI_BASE_URL": "https://open.bigmodel.cn/api/paas/v4/",
         "OPENAI_API_KEY": "sk-...",
-        "OPENCODE_LOG_DIR": "/path/to/logs/",
+        "OPENCODE_LOG_DIR": "/path/to/logs/"
       },
       "favorite_models": [],
       "default_config_options": {},
-      "favorite_config_option_values": {},
+      "favorite_config_option_values": {}
     }
   }
 }
@@ -211,34 +211,56 @@ Nuwaxcode 支持通过环境变量配置默认的模型连接参数，方便在�
 
 ### OpenAI 及其兼容协议 (OpenAI, DeepSeek, Ollama, openai-compatible 等)
 
-| 环境变量                   | 说明                     | 示例                          | 备注                   |
-| :------------------------- | :----------------------- | :---------------------------- | :--------------------- |
-| `OPENCODE_OPENAI_API_BASE` | OpenAI 兼容接口 Base URL | `https://api.deepseek.com/v1` | 兼容 `OPENAI_BASE_URL` |
-| `OPENCODE_OPENAI_API_KEY`  | API Key                  | `sk-proj-...`                 | 兼容 `OPENAI_API_KEY`  |
+| 环境变量                   | 说明                     | 示例                          |
+| :------------------------- | :----------------------- | :---------------------------- |
+| `OPENCODE_OPENAI_API_BASE` | OpenAI 兼容接口 Base URL | `https://api.deepseek.com/v1` |
+| `OPENCODE_OPENAI_API_KEY`  | API Key                  | `sk-proj-...`                 |
+
+> **多种环境变量名支持**
+>
+> 为了兼容不同的使用习惯和第三方工具，以下环境变量名互相等效（按优先级排序，靠前的优先级更高）：
+>
+> | 配置项   | 支持的环境变量名（按优先级）                                         |
+> | :------- | :------------------------------------------------------------------- |
+> | Base URL | `OPENCODE_OPENAI_API_BASE` > `OPENCODE_API_BASE` > `OPENAI_BASE_URL` |
+> | API Key  | `OPENCODE_OPENAI_API_KEY` > `OPENCODE_API_KEY` > `OPENAI_API_KEY`    |
 
 **示例场景：使用 openai-compatible 连接 DeepSeek**
 
 ```bash
+# 使用任意一种环境变量名均可
 export OPENCODE_MODEL="openai-compatible/deepseek-chat"
-export OPENAI_BASE_URL="https://api.deepseek.com/v1"
-export OPENAI_API_KEY="sk-..."
+export OPENAI_BASE_URL="https://api.deepseek.com/v1"   # 或 OPENCODE_OPENAI_API_BASE
+export OPENAI_API_KEY="sk-..."                         # 或 OPENCODE_OPENAI_API_KEY
 
 nuwaxcode run "Hello DeepSeek"
 ```
 
 ### Anthropic 及其兼容协议 (Claude, GLM-4 等)
 
-| 环境变量                      | 说明                        | 示例                        | 备注                      |
-| :---------------------------- | :-------------------------- | :-------------------------- | :------------------------ |
-| `OPENCODE_ANTHROPIC_API_BASE` | Anthropic 兼容接口 Base URL | `https://your-proxy.com/v1` | 兼容 `ANTHROPIC_BASE_URL` |
-| `OPENCODE_ANTHROPIC_API_KEY`  | API Key                     | `sk-ant-...`                | 兼容 `ANTHROPIC_API_KEY`  |
+| 环境变量                      | 说明                        | 示例                        |
+| :---------------------------- | :-------------------------- | :-------------------------- |
+| `OPENCODE_ANTHROPIC_API_BASE` | Anthropic 兼容接口 Base URL | `https://your-proxy.com/v1` |
+| `OPENCODE_ANTHROPIC_API_KEY`  | API Key                     | `sk-ant-...`                |
+
+> **多种环境变量名支持**
+>
+> 为了兼容不同的使用习惯和第三方工具，以下环境变量名互相等效（按优先级排序，靠前的优先级更高）：
+>
+> | 配置项   | 支持的环境变量名（按优先级）                                               |
+> | :------- | :------------------------------------------------------------------------- |
+> | Base URL | `OPENCODE_ANTHROPIC_API_BASE` > `OPENCODE_API_BASE` > `ANTHROPIC_BASE_URL` |
+> | API Key  | `OPENCODE_ANTHROPIC_API_KEY` > `OPENCODE_API_KEY` > `ANTHROPIC_API_KEY`    |
+>
+> ⚠️ **注意**: Anthropic 环境变量与 OpenAI 环境变量是独立的。例如，使用 `anthropic-compatible` 模型时，会优先读取 `OPENCODE_ANTHROPIC_*` 或 `ANTHROPIC_*` 系列变量，不会使用 `OPENAI_*` 变量。
 
 **示例场景：连接智谱 GLM-4 (Anthropic 兼容模式)**
 
 ```bash
+# 使用任意一种环境变量名均可
 export OPENCODE_MODEL="anthropic-compatible/glm-4.7"
-export ANTHROPIC_BASE_URL="https://open.bigmodel.cn/api/anthropic"
-export ANTHROPIC_API_KEY="your_api_key"
+export ANTHROPIC_BASE_URL="https://open.bigmodel.cn/api/anthropic"  # 或 OPENCODE_ANTHROPIC_API_BASE
+export ANTHROPIC_API_KEY="your_api_key"                             # 或 OPENCODE_ANTHROPIC_API_KEY
 
 nuwaxcode run "Hello GLM"
 ```
