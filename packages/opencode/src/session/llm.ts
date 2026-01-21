@@ -220,7 +220,7 @@ Options: ${JSON.stringify(params.options, null, 2)}
         ...(isCodex
           ? {
               originator: "opencode",
-              "User-Agent": `opencode/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
+              "User-Agent": `nuwaxcode/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
               session_id: input.sessionID,
             }
           : undefined),
@@ -233,7 +233,7 @@ Options: ${JSON.stringify(params.options, null, 2)}
             }
           : input.model.providerID !== "anthropic"
             ? {
-                "User-Agent": `opencode/${Installation.VERSION}`,
+                "User-Agent": `nuwaxcode/${Installation.VERSION}`,
               }
             : undefined),
         ...input.model.headers,

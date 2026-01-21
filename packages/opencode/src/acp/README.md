@@ -59,8 +59,8 @@ Add to your Zed configuration (`~/.config/zed/settings.json`):
 ```json
 {
   "agent_servers": {
-    "OpenCode": {
-      "command": "opencode",
+    "NuwaxCode": {
+      "command": "nuwaxcode",
       "args": ["acp"]
     }
   }
@@ -148,7 +148,7 @@ Each component has a single responsibility:
 
 This makes the codebase maintainable and testable.
 
-### Mapping to OpenCode
+### Mapping to NuwaxCode
 
 ACP sessions map cleanly to opencode's internal session model:
 
