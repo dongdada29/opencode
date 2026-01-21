@@ -2,6 +2,15 @@
 
 本文档总结了 `feat/nuwaxcode` 分支相对于主分支的主要更改。
 
+## v1.1.48
+
+### 🐛 修复
+
+- **ACP Model Selection**: 修复 Title Agent 错误使用 `gpt-5-nano` 的问题。
+- **Prompts**: 更新 prompts 中的品牌名称。
+
+---
+
 ## v1.1.47
 
 ### 🔄 优化
@@ -69,6 +78,7 @@
 - 修复 `catalog:` 协议导致的安装失败问题 (替换为具体版本号)
 - 隔离 Anthropic 环境变量与通用 opencode API 变量
 - 修复构建依赖问题
+- 修复 `AI_APICallError` 401: 移除 `opencode` provider 的 `gpt-5-nano` 自动回退
 
 ---
 
