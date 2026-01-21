@@ -23,6 +23,23 @@ export class ACPSessionManager {
     model?: ACPSessionState["model"],
     systemPrompt?: ACPSessionState["systemPrompt"],
   ): Promise<ACPSessionState> {
+    if (Log.file()) {
+      Log.raw(`[${new Date().toISOString()}] ACP Session Info:
+Type: New Session
+CWD: ${cwd}
+MCP Servers: ${JSON.stringify(mcpServers, null, 2)}
+`)
+      if (systemPrompt) {
+        const prompt = typeof systemPrompt === "string" ? systemPrompt : systemPrompt.append
+        Log.raw(`\n[${new Date().toISOString()}] System Prompt:\n${prompt}\n\n`)
+      }
+      if (model) {
+        Log.raw(`[${new Date().toISOString()}] Model Configuration:
+Provider: ${model.providerID}
+Model: ${model.modelID}
+`)
+      }
+    }
     const session = await this.sdk.session
       .create(
         {
@@ -56,6 +73,20 @@ export class ACPSessionManager {
     mcpServers: McpServer[],
     model?: ACPSessionState["model"],
   ): Promise<ACPSessionState> {
+    if (Log.file()) {
+      Log.raw(`[${new Date().toISOString()}] ACP Session Info:
+Type: Load Session
+Session ID: ${sessionId}
+CWD: ${cwd}
+MCP Servers: ${JSON.stringify(mcpServers, null, 2)}
+`)
+      if (model) {
+        Log.raw(`[${new Date().toISOString()}] Model Configuration:
+Provider: ${model.providerID}
+Model: ${model.modelID}
+`)
+      }
+    }
     const session = await this.sdk.session
       .get(
         {
