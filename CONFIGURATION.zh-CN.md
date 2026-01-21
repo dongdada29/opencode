@@ -5,7 +5,7 @@
 首先，请通过 npm 全局安装 Nuwaxcode：
 
 ```bash
-npm install -g @xagi/nuwaxcode@latest
+npm install -g nuwaxcode@latest
 ```
 
 ## ACP Meta 配置
