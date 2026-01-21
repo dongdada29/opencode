@@ -1521,7 +1521,11 @@ export namespace Provider {
 
     // Check if opencode provider is available before using it
     const opencodeProvider = await state().then((state) => state.providers["opencode"])
-    if (opencodeProvider && opencodeProvider.models["gpt-5-nano"]) {
+    if (
+      opencodeProvider &&
+      opencodeProvider.models["gpt-5-nano"] &&
+      (providerID === "opencode" || (await Auth.get("opencode")))
+    ) {
       return getModel("opencode", "gpt-5-nano")
     }
 
