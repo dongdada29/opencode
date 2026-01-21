@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.1.41",
-  "name": "@xagi/nuwaxcode",
+  "version": "1.1.45",
+  "name": "nuwaxcode",
   "type": "module",
   "license": "MIT",
   "publishConfig": {
@@ -17,6 +17,7 @@
     "lint": "echo 'Running lint checks...' && bun test --coverage",
     "format": "echo 'Formatting code...' && bun run --prettier --write src/**/*.ts",
     "docs": "echo 'Generating documentation...' && find src -name '*.ts' -exec echo 'Processing: {}' \\;",
+    "publish": "bun run script/publish.ts",
     "deploy": "echo 'Deploying application...' && bun run build && echo 'Deployment completed successfully'"
   },
   "bin": {
@@ -120,10 +121,12 @@
     "zod-to-json-schema": "3.24.5"
   },
   "optionalDependencies": {
-    "@xagi/nuwaxcode-darwin-arm64": "1.1.39",
-    "@xagi/nuwaxcode-darwin-x64": "1.1.39",
-    "@xagi/nuwaxcode-linux-arm64": "1.1.39",
-    "@xagi/nuwaxcode-linux-x64": "1.1.39",
-    "@xagi/nuwaxcode-windows-x64": "1.1.39"
+    "nuwaxcode-darwin-arm64": "1.1.45",
+    "nuwaxcode-darwin-x64": "1.1.45",
+    "nuwaxcode-linux-arm64": "1.1.45",
+    "nuwaxcode-linux-arm64-musl": "1.1.45",
+    "nuwaxcode-linux-x64": "1.1.45",
+    "nuwaxcode-linux-x64-musl": "1.1.45",
+    "nuwaxcode-windows-x64": "1.1.45"
   }
 }

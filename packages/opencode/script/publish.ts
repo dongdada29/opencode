@@ -2,16 +2,38 @@
 import { $ } from "bun"
 import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
+import { isCancel, text } from "@clack/prompts"
 import { fileURLToPath } from "url"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
 const { binaries } = await import("./build.ts")
+
+const otpArg = process.argv.find(arg => arg.startsWith("--otp="))
+let otp = otpArg ? otpArg.split("=")[1] : null
+
+if (!otp) {
+  const response = await text({
+    message: "Enter NPM OTP (required for 2FA, leave empty to skip):",
+    placeholder: "123456",
+  })
+
+  if (isCancel(response)) {
+    process.exit(0)
+  }
+
+  if (response) {
+    otp = response as string
+  }
+}
+
+const otpFlags = otp ? ["--otp", otp] : []
+
 {
   const name = `${pkg.name}-${process.platform}-${process.arch}`
-  console.log(`smoke test: running dist/${name}/bin/opencode --version`)
-  await $`./dist/${name}/bin/opencode --version`
+  console.log(`smoke test: running dist/${name}/bin/nuwaxcode --version`)
+  await $`./dist/${name}/bin/nuwaxcode --version`
 }
 
 await $`mkdir -p ./dist/${pkg.name}`
@@ -21,14 +43,14 @@ await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
   JSON.stringify(
     {
-      name: pkg.name + "-ai",
+      name: pkg.name,
       bin: {
         [pkg.name]: `./bin/${pkg.name}`,
       },
       scripts: {
         postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
       },
-      version: Script.version,
+      version: pkg.version,
       optionalDependencies: binaries,
     },
     null,
@@ -44,12 +66,12 @@ const tasks = Object.entries(binaries).map(async ([name]) => {
   }
   await $`bun pm pack`.cwd(`./dist/${name}`)
   for (const tag of tags) {
-    await $`npm publish *.tgz --access public --tag ${tag}`.cwd(`./dist/${name}`)
+    await $`npm publish *.tgz --access public --tag ${tag} ${otpFlags}`.cwd(`./dist/${name}`)
   }
 })
 await Promise.all(tasks)
 for (const tag of tags) {
-  await $`cd ./dist/${pkg.name} && bun pm pack && npm publish *.tgz --access public --tag ${tag}`
+  await $`cd ./dist/${pkg.name} && bun pm pack && npm publish *.tgz --access public --tag ${tag} ${otpFlags}`
 }
 
 if (!Script.preview) {
@@ -62,9 +84,9 @@ if (!Script.preview) {
     }
   }
 
-  const image = "ghcr.io/anomalyco/opencode"
+  const image = "ghcr.io/anomalyco/nuwaxcode"
   const platforms = "linux/amd64,linux/arm64"
-  const tags = [`${image}:${Script.version}`, `${image}:latest`]
+  const tags = [`${image}:${pkg.version}`, `${image}:latest`]
   const tagFlags = tags.flatMap((t) => ["-t", t])
   await $`docker buildx build --platform ${platforms} ${tagFlags} --push .`
 }

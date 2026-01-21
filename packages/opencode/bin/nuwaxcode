@@ -46,6 +46,23 @@ let arch = archMap[os.arch()]
 if (!arch) {
   arch = os.arch()
 }
+const isMusl = (() => {
+  if (os.platform() !== "linux") return false
+  try {
+    const output = childProcess.execSync("ldd --version", { stdio: "pipe" }).toString()
+    return output.includes("musl")
+  } catch (e) {
+    // If ldd is missing or fails, we might still be on musl (e.g. very minimal image)
+    // but we'll fall back to default behavior.
+    return false
+  }
+})()
+
+if (isMusl && platform === "linux") {
+  platform = "linux"
+  arch = arch + "-musl"
+}
+
 const base = "nuwaxcode-" + platform + "-" + arch
 const binary = platform === "windows" ? "nuwaxcode.exe" : "nuwaxcode"
 
@@ -56,21 +73,6 @@ function findBinary(startDir) {
     if (fs.existsSync(modules)) {
       const entries = fs.readdirSync(modules)
       for (const entry of entries) {
-        if (entry === "@xagi") {
-            const scopeDir = path.join(modules, entry)
-            if (fs.existsSync(scopeDir)) {
-                const scopeEntries = fs.readdirSync(scopeDir)
-                for (const scopeEntry of scopeEntries) {
-                    if (!scopeEntry.startsWith(base)) {
-                        continue
-                    }
-                    const candidate = path.join(scopeDir, scopeEntry, "bin", binary)
-                    if (fs.existsSync(candidate)) {
-                        return candidate
-                    }
-                }
-            }
-        }
         if (!entry.startsWith(base)) {
           continue
         }
@@ -90,9 +92,10 @@ function findBinary(startDir) {
 
 const resolved = findBinary(scriptDir)
 if (!resolved) {
+  const manualInstall = isMusl ? base : base
   console.error(
     'It seems that your package manager failed to install the right version of the opencode CLI for your platform. You can try manually installing the "' +
-      base +
+      manualInstall +
       '" package',
   )
   process.exit(1)
