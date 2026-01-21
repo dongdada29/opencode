@@ -3151,6 +3151,20 @@
 
     "nuwaxcode": ["nuwaxcode@workspace:packages/opencode"],
 
+    "nuwaxcode-darwin-arm64": ["nuwaxcode-darwin-arm64@1.1.45", "", { "os": "darwin", "cpu": "arm64" }, "sha512-1VEOC3L/Qnx54CTxAnL8owoV+sZMCzvb0Ri9XhTJ4vVXObr0Rrfsk0jikvEh3Et4UMGAUEZ6cCO9WxewGg0VcQ=="],
+
+    "nuwaxcode-darwin-x64": ["nuwaxcode-darwin-x64@1.1.45", "", { "os": "darwin", "cpu": "x64" }, "sha512-dCiEB3J37q5GgWD6pJvhcX85NE4G4Zs3wQp47hCC96TYRZdvF7EIZgHbSxM1MKfaNYl3mLaLKDI/TehPL9zz+Q=="],
+
+    "nuwaxcode-linux-arm64": ["nuwaxcode-linux-arm64@1.1.45", "", { "os": "linux", "cpu": "arm64" }, "sha512-Qae0DWpwovQm+ET9lwEl1eFFuFC0+trSvg+boKZ/DP+1g2HQeXJl8UQYslYHr8sVxHpfPtQDVmyMq/m9zqy7uw=="],
+
+    "nuwaxcode-linux-arm64-musl": ["nuwaxcode-linux-arm64-musl@1.1.45", "", { "os": "linux", "cpu": "arm64" }, "sha512-XpdsopcqzZxi9m+2Sb83pIVUbo96ZsnzK69xV4qNPAFrFuft+b8ci+BCnhY1w7PvKrp+BCfEh9WObpJ1ut624g=="],
+
+    "nuwaxcode-linux-x64": ["nuwaxcode-linux-x64@1.1.45", "", { "os": "linux", "cpu": "x64" }, "sha512-DS+YNk47H+QacGQLGKfRsRAsjKj7uz/enlu10ZEFQrLilYUuWsxjwEewxY5RWLoYf55/wacRkRrbLzz+mJWeKQ=="],
+
+    "nuwaxcode-linux-x64-musl": ["nuwaxcode-linux-x64-musl@1.1.45", "", { "os": "linux", "cpu": "x64" }, "sha512-9EQQfWm+p1liTuASKUX/kS57ZhwoJ/QnHSoJ7B9vs5tpEyqaceC762eeqzrB0+Gb8/qLXdonrOMPCtjlRPqBCA=="],
+
+    "nuwaxcode-windows-x64": ["nuwaxcode-windows-x64@1.1.45", "", { "os": "win32", "cpu": "x64" }, "sha512-3o6fJI4WgZHaQvJtDvpiJA1efYK7BXBgY9ByujJFB1Uojidxv7dSyldo1Tj01tuuBDMmMpo9rFaP0UjpKioe0w=="],
+
     "nypm": ["nypm@0.6.4", "", { "dependencies": { "citty": "^0.2.0", "pathe": "^2.0.3", "tinyexec": "^1.0.2" }, "bin": { "nypm": "dist/cli.mjs" } }, "sha512-1TvCKjZyyklN+JJj2TS3P4uSQEInrM/HkkuSXsEzm1ApPgBffOn8gFguNnZf07r/1X6vlryfIqMUkJKQMzlZiw=="],
 
     "object-assign": ["object-assign@4.1.1", "", {}, "sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg=="],
