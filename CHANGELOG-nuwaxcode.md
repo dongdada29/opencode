@@ -2,6 +2,24 @@
 
 本文档总结了 `feat/nuwaxcode` 分支相对于主分支的主要更改。
 
+## v1.1.53 (2026-01-22)
+
+### 🐛 修复
+
+- **Config**: 支持在 Linux 上读取固定路径 `/root/.config/opencode/opencode.json` 的配置文件。
+
+---
+## v1.1.52 (2026-01-22)
+
+### 🐛 修复
+
+- **Logging**: 修复日志初始化过晚导致早期日志泄漏到终端的问题，实现同步早期初始化。
+- **MCP**: 修复本地 MCP 服务器启动时因 stderr 流不兼容导致的 `TODO: stream.Readable stdio @ 2` 错误。
+- **Debug**: 增强 MCP 工具加载调试日志，包含详细的启动命令、环境信息及工具列表追踪。
+- **Dependencies**: 修复 `optionalDependencies` 版本同步逻辑。
+
+---
+
 ## v1.1.51 (2026-01-22)
 
 ### 🔄 优化

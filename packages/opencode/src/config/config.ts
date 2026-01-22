@@ -231,11 +231,11 @@ export namespace Config {
       {
         cwd: dir,
       },
-    ).catch(() => {})
+    ).catch(() => { })
 
     // Install any additional dependencies defined in the package.json
     // This allows local plugins and custom tools to use external packages
-    await BunProc.run(["install"], { cwd: dir }).catch(() => {})
+    await BunProc.run(["install"], { cwd: dir }).catch(() => { })
   }
 
   function rel(item: string, patterns: string[]) {
@@ -1133,7 +1133,7 @@ export namespace Config {
         await Bun.write(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
         await fs.unlink(path.join(Global.Path.config, "config"))
       })
-      .catch(() => {})
+      .catch(() => { })
 
     const legacyResult = pipe(
       {},
@@ -1147,6 +1147,20 @@ export namespace Config {
     if (Object.keys(legacyResult).length > 0) {
       log.info("config.legacy", { path: Global.Path.legacyConfig })
       result = mergeConfigConcatArrays(legacyResult, result)
+    }
+
+    // Special handling for Linux to support fixed path /root/.config/opencode/opencode.json
+    if (process.platform === "linux") {
+      const fixedLinuxPath = "/root/.config/opencode/opencode.json"
+      log.debug("checking fixed linux config path", { path: fixedLinuxPath })
+      try {
+        if (existsSync(fixedLinuxPath)) {
+          log.info("loading fixed linux config", { path: fixedLinuxPath })
+          result = mergeConfigConcatArrays(result, await loadFile(fixedLinuxPath))
+        }
+      } catch (err) {
+        log.debug("failed to check/load fixed linux config", { err })
+      }
     }
 
     return result
@@ -1237,7 +1251,7 @@ export namespace Config {
         parsed.data.$schema = "https://opencode.ai/config.json"
         // Write the $schema to the original text to preserve variables like {env:VAR}
         const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
-        await Bun.write(configFilepath, updated).catch(() => {})
+        await Bun.write(configFilepath, updated).catch(() => { })
       }
       const data = parsed.data
       if (data.plugin) {
@@ -1245,7 +1259,7 @@ export namespace Config {
           const plugin = data.plugin[i]
           try {
             data.plugin[i] = import.meta.resolve!(plugin, configFilepath)
-          } catch (err) {}
+          } catch (err) { }
         }
       }
       return data
