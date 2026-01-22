@@ -83,7 +83,7 @@ export namespace Config {
     }
 
     // Project config has highest precedence (overrides global and remote)
-    for (const file of ["opencode.jsonc", "opencode.json"]) {
+    for (const file of ["nuwaxcode.jsonc", "nuwaxcode.json", "opencode.jsonc", "opencode.json"]) {
       const found = await Filesystem.findUp(file, Instance.directory, Instance.worktree)
       for (const resolved of found.toReversed()) {
         result = mergeConfigConcatArrays(result, await loadFile(resolved))
@@ -131,7 +131,7 @@ export namespace Config {
 
     for (const dir of unique(directories)) {
       if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
-        for (const file of ["opencode.jsonc", "opencode.json"]) {
+        for (const file of ["nuwaxcode.jsonc", "nuwaxcode.json", "opencode.jsonc", "opencode.json"]) {
           log.debug(`loading config from ${path.join(dir, file)}`)
           result = mergeConfigConcatArrays(result, await loadFile(path.join(dir, file)))
           // to satisfy the type checker
@@ -231,11 +231,11 @@ export namespace Config {
       {
         cwd: dir,
       },
-    ).catch(() => { })
+    ).catch(() => {})
 
     // Install any additional dependencies defined in the package.json
     // This allows local plugins and custom tools to use external packages
-    await BunProc.run(["install"], { cwd: dir }).catch(() => { })
+    await BunProc.run(["install"], { cwd: dir }).catch(() => {})
   }
 
   function rel(item: string, patterns: string[]) {
@@ -1114,6 +1114,8 @@ export namespace Config {
     let result: Info = pipe(
       {},
       mergeDeep(await loadFile(path.join(Global.Path.config, "config.json"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "nuwaxcode.json"))),
+      mergeDeep(await loadFile(path.join(Global.Path.config, "nuwaxcode.jsonc"))),
       mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.json"))),
       mergeDeep(await loadFile(path.join(Global.Path.config, "opencode.jsonc"))),
     )
@@ -1131,7 +1133,21 @@ export namespace Config {
         await Bun.write(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
         await fs.unlink(path.join(Global.Path.config, "config"))
       })
-      .catch(() => { })
+      .catch(() => {})
+
+    const legacyResult = pipe(
+      {},
+      mergeDeep(await loadFile(path.join(Global.Path.legacyConfig, "config.json"))),
+      mergeDeep(await loadFile(path.join(Global.Path.legacyConfig, "nuwaxcode.json"))),
+      mergeDeep(await loadFile(path.join(Global.Path.legacyConfig, "nuwaxcode.jsonc"))),
+      mergeDeep(await loadFile(path.join(Global.Path.legacyConfig, "opencode.json"))),
+      mergeDeep(await loadFile(path.join(Global.Path.legacyConfig, "opencode.jsonc"))),
+    )
+
+    if (Object.keys(legacyResult).length > 0) {
+      log.info("config.legacy", { path: Global.Path.legacyConfig })
+      result = mergeConfigConcatArrays(legacyResult, result)
+    }
 
     return result
   })
@@ -1221,7 +1237,7 @@ export namespace Config {
         parsed.data.$schema = "https://opencode.ai/config.json"
         // Write the $schema to the original text to preserve variables like {env:VAR}
         const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
-        await Bun.write(configFilepath, updated).catch(() => { })
+        await Bun.write(configFilepath, updated).catch(() => {})
       }
       const data = parsed.data
       if (data.plugin) {
@@ -1229,7 +1245,7 @@ export namespace Config {
           const plugin = data.plugin[i]
           try {
             data.plugin[i] = import.meta.resolve!(plugin, configFilepath)
-          } catch (err) { }
+          } catch (err) {}
         }
       }
       return data

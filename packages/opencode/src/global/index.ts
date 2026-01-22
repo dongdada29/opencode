@@ -10,6 +10,8 @@ const cache = path.join(xdgCache!, app)
 const config = path.join(xdgConfig!, app)
 const state = path.join(xdgState!, app)
 
+const legacyConfig = path.join(xdgConfig!, "opencode")
+
 export namespace Global {
   export const Path = {
     // Allow override via OPENCODE_TEST_HOME for test isolation
@@ -22,6 +24,9 @@ export namespace Global {
     cache,
     config,
     state,
+    get legacyConfig() {
+      return legacyConfig
+    },
   }
 }
 

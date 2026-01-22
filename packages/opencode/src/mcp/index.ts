@@ -118,7 +118,7 @@ export namespace MCP {
   }
 
   // Convert MCP tool definition to AI SDK Tool type
-  async function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, timeout?: number): Promise<Tool> {
+  async function convertMcpTool(mcpTool: MCPToolDef, client: MCPClient, serverName: string, timeout?: number): Promise<Tool> {
     const inputSchema = mcpTool.inputSchema
 
     // Spread first, then override type to ensure it's always "object"
@@ -133,7 +133,7 @@ export namespace MCP {
       description: mcpTool.description ?? "",
       inputSchema: jsonSchema(schema),
       execute: async (args: unknown) => {
-        const timer = log.time("mcp.tool.execute", { tool: mcpTool.name, args: JSON.stringify(args) })
+        const timer = log.time("mcp.tool.execute", { server: serverName, tool: mcpTool.name, args: JSON.stringify(args) })
         try {
           const result = await client.callTool(
             {
@@ -149,7 +149,7 @@ export namespace MCP {
           timer.stop()
           return result
         } catch (error) {
-          log.error("mcp.tool.execute failed", { tool: mcpTool.name, error })
+          log.error("mcp.tool.execute failed", { server: serverName, tool: mcpTool.name, error })
           throw error
         }
       },
@@ -417,21 +417,18 @@ export namespace MCP {
     if (mcp.type === "local") {
       const [cmd, ...args] = mcp.command
       const cwd = Instance.directory
+      const env = {
+        ...process.env,
+        ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
+        ...mcp.environment,
+      }
+      log.info("starting local mcp", { key, command: mcp.command, cwd, envKeys: Object.keys(env) })
+
       const transport = new StdioClientTransport({
-        stderr: new Writable({
-          write(chunk, encoding, callback) {
-            log.info("mcp.stderr", { key, chunk: chunk.toString() })
-            callback()
-          },
-        }),
         command: cmd,
         args,
         cwd,
-        env: {
-          ...process.env,
-          ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
-          ...mcp.environment,
-        },
+        env,
       })
 
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
@@ -497,7 +494,7 @@ export namespace MCP {
       }
     }
 
-    log.info("create() successfully created client", { key, toolCount: result.tools.length })
+    log.info("create() successfully created client", { key, toolCount: result.tools.length, tools: result.tools.map(t => t.name) })
     return {
       mcpClient,
       status,
@@ -607,9 +604,10 @@ export namespace MCP {
       for (const mcpTool of toolsResult.tools) {
         const sanitizedClientName = clientName.replace(/[^a-zA-Z0-9_-]/g, "_")
         const sanitizedToolName = mcpTool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
-        result[sanitizedClientName + "_" + sanitizedToolName] = await convertMcpTool(mcpTool, client, timeout)
+        result[sanitizedClientName + "_" + sanitizedToolName] = await convertMcpTool(mcpTool, client, clientName, timeout)
       }
     }
+    log.info("MCP.tools() returning aggregated tools", { count: Object.keys(result).length, tools: Object.keys(result) })
     return result
   }
 
