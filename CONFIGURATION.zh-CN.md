@@ -277,6 +277,34 @@ export ANTHROPIC_API_KEY="your_api_key"                             # 或 OPENCO
 nuwaxcode run "Hello GLM"
 ```
 
+
+## 上下文限制配置 (max_context_tokens)
+
+除了输出限制，您还可以配置 `max_context_tokens` 来限制模型的上下文窗口大小 (Context Window)。这对于使用代理或自定义模型时非常有用，可以强制截断过长的上下文，避免超出模型限制。
+
+配置优先级：Model Options > Provider Options > Environment Variable > Default
+
+### 示例配置
+
+```json
+{
+  "provider": {
+    "openai-compatible": {
+      "options": {
+        "max_context_tokens": 16000 // 为该 provider 的所有模型设置上下文上限
+      },
+      "models": {
+        "deepseek-chat": {
+            "options": {
+                "max_context_tokens": 32000 // 仅为该模型设置上下文上限，覆盖 provider 设置
+            }
+        }
+      }
+    }
+  }
+}
+```
+
 ## Token 限制配置 (max_tokens)
 
 对于 `openai-compatible` 和 `anthropic-compatible` 等自定义模型，您可以通过配置文件覆盖默认的 Token 输出限制。默认情况下，系统使用 4096 作为输出后的最大 token 数限制，您可以通过 `options.max_tokens` 来修改此值。
@@ -311,6 +339,7 @@ nuwaxcode run "Hello GLM"
 | 环境变量                      | 说明                                        |
 | :---------------------------- | :------------------------------------------ |
 | `OPENCODE_MAX_TOKENS`         | 全局最大 Token 限制 (所有自定义 Provider)   |
+| `OPENCODE_MAX_CONTEXT_TOKENS` | 全局上下文窗口限制 (所有自定义 Provider)    |
 
 **示例：**
 
