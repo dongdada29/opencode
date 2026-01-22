@@ -13,8 +13,7 @@ const { binaries } = await import("./build.ts")
 const otpArg = process.argv.find(arg => arg.startsWith("--otp="))
 let otp = otpArg ? otpArg.split("=")[1] : null
 
-const noOtp = process.argv.includes("--no-otp")
-if (!otp && !noOtp) {
+if (!otp) {
   const response = await text({
     message: "Enter NPM OTP (required for 2FA, leave empty to skip):",
     placeholder: "123456",
