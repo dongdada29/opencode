@@ -51,7 +51,7 @@ export namespace Plugin {
     for (let plugin of plugins) {
       // ignore old codex plugin since it is supported first party now
       if (plugin.includes("opencode-openai-codex-auth") || plugin.includes("opencode-copilot-auth")) continue
-      log.info("loading plugin", { path: plugin })
+      using _ = log.time("plugin.load", { path: plugin })
       if (!plugin.startsWith("file://")) {
         const lastAtIndex = plugin.lastIndexOf("@")
         const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
@@ -117,6 +117,7 @@ export namespace Plugin {
   }
 
   export async function init() {
+    using _ = log.time("plugin.init")
     const hooks = await state().then((x) => x.hooks)
     const config = await Config.get()
     for (const hook of hooks) {

@@ -23,23 +23,13 @@ export class ACPSessionManager {
     model?: ACPSessionState["model"],
     systemPrompt?: ACPSessionState["systemPrompt"],
   ): Promise<ACPSessionState> {
-    if (Log.file()) {
-      Log.raw(`[${new Date().toISOString()}] ACP Session Info:
-Type: New Session
-CWD: ${cwd}
-MCP Servers: ${JSON.stringify(mcpServers, null, 2)}
-`)
-      if (systemPrompt) {
-        const prompt = typeof systemPrompt === "string" ? systemPrompt : systemPrompt.append
-        Log.raw(`\n[${new Date().toISOString()}] System Prompt:\n${prompt}\n\n`)
-      }
-      if (model) {
-        Log.raw(`[${new Date().toISOString()}] Model Configuration:
-Provider: ${model.providerID}
-Model: ${model.modelID}
-`)
-      }
-    }
+    log.info("session.context", {
+      type: "New Session",
+      cwd,
+      mcpServers,
+      model,
+      systemPrompt,
+    })
     const session = await this.sdk.session
       .create(
         {
@@ -61,7 +51,7 @@ Model: ${model.modelID}
       model: resolvedModel,
       systemPrompt,
     }
-    log.info("creating_session", { state })
+    log.info("session.create.result", { state })
 
     this.sessions.set(sessionId, state)
     return state
@@ -73,20 +63,13 @@ Model: ${model.modelID}
     mcpServers: McpServer[],
     model?: ACPSessionState["model"],
   ): Promise<ACPSessionState> {
-    if (Log.file()) {
-      Log.raw(`[${new Date().toISOString()}] ACP Session Info:
-Type: Load Session
-Session ID: ${sessionId}
-CWD: ${cwd}
-MCP Servers: ${JSON.stringify(mcpServers, null, 2)}
-`)
-      if (model) {
-        Log.raw(`[${new Date().toISOString()}] Model Configuration:
-Provider: ${model.providerID}
-Model: ${model.modelID}
-`)
-      }
-    }
+    log.info("session.context", {
+      type: "Load Session",
+      sessionId,
+      cwd,
+      mcpServers,
+      model,
+    })
     const session = await this.sdk.session
       .get(
         {
@@ -106,7 +89,7 @@ Model: ${model.modelID}
       createdAt: new Date(session.time.created),
       model: resolvedModel,
     }
-    log.info("loading_session", { state })
+    log.info("session.load.result", { state })
 
     this.sessions.set(sessionId, state)
     return state

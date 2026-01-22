@@ -2,3 +2,4 @@
 - To regenerate the JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
 - ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
 - The default branch in this repo is `dev`.
+- To publish a new version, update `CHANGELOG-nuwaxcode.md` and `packages/opencode/package.json`, then run `bun run publish`.

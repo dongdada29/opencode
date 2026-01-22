@@ -149,11 +149,11 @@ tail -f ~/.local/share/opencode/log/nuwaxcode.log
 
 ---
 
-## System Prompt 与 模型配置日志
+## 可观测性与日志参考
 
-为了方便调试和审计，Nuwaxcode 支持将完整的 System Prompt（系统提示词）和当前生效的 Model Configuration（模型配置）记录到本地日志文件中。
+为了方便调试、审计和性能分析，Nuwaxcode 提供了详细的结构化日志（Structured Logging）。日志文件默认以 `key=value` 的形式记录，关键字段采用 JSON 格式以保留层级结构。
 
-### 启用方式
+### 启用日志
 
 #### 方式一：CLI 参数
 
@@ -165,38 +165,53 @@ nuwaxcode run "hello" --log-dir ./logs
 
 #### 方式二：环境变量 (默认配置)
 
-如果希望默认开启日志并指定目录，可以设置环境变量 `OPENCODE_LOG_DIR`：
+设置环境变量 `OPENCODE_LOG_DIR`：
 
 ```bash
 export OPENCODE_LOG_DIR="./logs"
 nuwaxcode run "hello"
 ```
 
-### 日志文件
-
 日志文件将按日期生成，例如 `nuwaxcode_2026_01_20.log`。
+
+### 核心日志事件一览表
+
+以下是日志中常见的事件名称（Event Name）及其含义，便于快速检索：
+
+| 分类 | 事件名称 (`Event`) | 含义与关键信息 |
+| :--- | :--- | :--- |
+| **System** | `system.env` | 系统启动时的完整环境变量快照。<br>敏感信息（如 API Key, Token 等）已自动脱敏为 `******`。 |
+| **Config** | `config.load` | 最终加载的完整配置对象 (已过滤敏感信息)。<br>包含了从文件、默认值合并后的所有设置。 |
+| **ACP** | `acp.initialize` | ACP 协议初始化握手。<br>记录 `clientCapabilities`, `clientInfo` 等客户端信息。 |
+| | `acp.shutdown.success/error` | ACP 服务正常关闭或异常退出。<br>标志着连接周期的结束。 |
+| | `acp.message.part` | **双向**消息/内容更新。<br>包含**用户输入**与**模型生成**的实时增量及工具状态。 |
+| | `acp.permission.result` | 权限请求结果。<br>记录 `permissionID`, `outcome` (allow/reject)。 |
+| | `acp.tool.update` | 工具调用状态更新。<br>记录 `toolCallId`, `status` (pending/in_progress/completed/error)。 |
+| **Session** | `session.create` | 发起会话创建请求。<br>记录 `sessionId`, `cwd`, `mcpServers` (MCP 服务数量)。 |
+| | `session.create.result` | 会话创建成功。<br>记录最终的 Session State 对象。 |
+| | `session.load` / `.result` | 会话加载请求与结果。<br>用于恢复旧会话。 |
+| | `session.context` | 会话上下文详情。<br>包含完整的 `systemPrompt`, `model` 配置, `cwd` 等。 |
+| **LLM** | `llm.prompt` | 发送给 LLM 的完整提示词。<br>字段：`content` (完整文本)。 |
+| | `llm.config` | 当前 LLM 请求的配置参数。<br>字段：`provider`, `model`, `temperature`, `options`。 |
+| **MCP** | `mcp.tool.execute` | MCP 工具执行详情。<br>字段：`tool` (名称), `args` (参数), `duration` (耗时), `status` (started/completed)。 |
+| | `mcp.stderr` | 本地 MCP 服务的标准错误输出 (stderr)。<br>用于捕获工具内部崩溃或调试信息。 |
+| **Skill** | `skill.load` | 技能加载事件。<br>字段：`name` (技能名), `location` (定义文件路径)。 |
+| | `skill.execute` | 技能执行事件。<br>字段：`name`, `dir` (运行目录)。 |
+| **Performance** | `provider.state` | 核心 Provider 状态初始化。<br>关键耗时点，包含所有 Provider 的发现与合并。 |
+| | `provider.getSDK` | 动态加载特定 Provider SDK。<br>可能涉及 `bun install` 耗时。 |
+| | `plugin.load` | 插件加载耗时。<br>包含插件安装与导入过程。 |
+| | `bun.install` | 依赖安装耗时。<br>底层依赖包的下载与安装。 |
 
 ### 日志内容示例
 
-日志中将包含以下关键信息：
-
-1.  **System Prompt**: 完整的系统提示词，包含所有注入的上下文和规则。
-2.  **Model Configuration**: 当前调用的模型参数（Provider, Model ID, Temperature 等）。
-
 ```text
-[2026-01-20T08:50:48.712Z] System Prompt:
-You are opencode, an interactive CLI tool ...
-...
+[2026-01-20T08:50:48.712Z] INFO  llm.prompt content="You are opencode, an interactive CLI tool..."
 
-[2026-01-20T08:50:48.713Z] Model Configuration:
-Provider: opencode
-Model: big-pickle
-Temperature: N/A
-TopP: N/A
-TopK: N/A
-Options: {
-  "reasoningEffort": "minimal"
-}
+[2026-01-20T08:50:48.713Z] INFO  llm.config provider=opencode model=big-pickle temperature=N/A options={"reasoningEffort":"minimal"}
+
+[2026-01-20T08:50:48.715Z] INFO  system.env PATH=/usr/bin:/bin NODE_ENV=development ...
+
+[2026-01-20T08:51:12.334Z] INFO  mcp.tool.execute status=completed duration=150ms tool=list_files
 ```
 
 ---

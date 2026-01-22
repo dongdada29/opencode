@@ -39,6 +39,17 @@ export namespace Config {
   export const state = Instance.state(async () => {
     const auth = await Auth.all()
 
+    // Log environment variables for debugging
+    const envVars = Object.keys(process.env).reduce(
+      (acc, key) => {
+        const isSensitive = /(_KEY|_SECRET|_TOKEN|_PASSWORD|_CREDENTIAL)/i.test(key)
+        acc[key] = isSensitive ? "******" : process.env[key]
+        return acc
+      },
+      {} as Record<string, string | undefined>,
+    )
+    log.info("system.env", envVars)
+
     // Load remote/well-known config first as the base layer (lowest precedence)
     // This allows organizations to provide default configs that users can override
     let result: Info = {}
@@ -187,6 +198,17 @@ export namespace Config {
 
     result.plugin = deduplicatePlugins(result.plugin ?? [])
 
+    // Log final merged configuration with sensitive data masked
+    const maskedConfig = JSON.parse(
+      JSON.stringify(result, (key, value) => {
+        if (/(_KEY|_SECRET|_TOKEN|_PASSWORD|_CREDENTIAL)/i.test(key)) {
+          return "******"
+        }
+        return value
+      }),
+    )
+    log.info("config.load", { config: maskedConfig })
+
     return {
       config: result,
       directories,
@@ -209,11 +231,11 @@ export namespace Config {
       {
         cwd: dir,
       },
-    ).catch(() => {})
+    ).catch(() => { })
 
     // Install any additional dependencies defined in the package.json
     // This allows local plugins and custom tools to use external packages
-    await BunProc.run(["install"], { cwd: dir }).catch(() => {})
+    await BunProc.run(["install"], { cwd: dir }).catch(() => { })
   }
 
   function rel(item: string, patterns: string[]) {
@@ -1109,7 +1131,7 @@ export namespace Config {
         await Bun.write(path.join(Global.Path.config, "config.json"), JSON.stringify(result, null, 2))
         await fs.unlink(path.join(Global.Path.config, "config"))
       })
-      .catch(() => {})
+      .catch(() => { })
 
     return result
   })
@@ -1199,7 +1221,7 @@ export namespace Config {
         parsed.data.$schema = "https://opencode.ai/config.json"
         // Write the $schema to the original text to preserve variables like {env:VAR}
         const updated = original.replace(/^\s*\{/, '{\n  "$schema": "https://opencode.ai/config.json",')
-        await Bun.write(configFilepath, updated).catch(() => {})
+        await Bun.write(configFilepath, updated).catch(() => { })
       }
       const data = parsed.data
       if (data.plugin) {
@@ -1207,7 +1229,7 @@ export namespace Config {
           const plugin = data.plugin[i]
           try {
             data.plugin[i] = import.meta.resolve!(plugin, configFilepath)
-          } catch (err) {}
+          } catch (err) { }
         }
       }
       return data

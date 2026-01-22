@@ -13,6 +13,10 @@ export namespace BunProc {
   const req = createRequire(import.meta.url)
 
   export async function run(cmd: string[], options?: Bun.SpawnOptions.OptionsObject<any, any, any>) {
+    using _ = log.time("bun.run", {
+      cmd: [which(), ...cmd].join(" "),
+      ...options,
+    })
     log.info("running", {
       cmd: [which(), ...cmd],
       ...options,
@@ -64,6 +68,7 @@ export namespace BunProc {
   export async function install(pkg: string, version = "latest") {
     // Use lock to ensure only one install at a time
     using _ = await Lock.write("bun-install")
+    using __ = log.time("bun.install", { pkg, version })
 
     const mod = path.join(Global.Path.cache, "node_modules", pkg)
     const pkgjson = Bun.file(path.join(Global.Path.cache, "package.json"))

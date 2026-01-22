@@ -92,24 +92,20 @@ export namespace LLM {
       system.length = 0
       system.push(header, rest.join("\n"))
     }
-    
-    l.info("system prompt", {
-       content: system.join("\n\n")
-    })
 
-    if (Log.file()) {
-      Log.raw(`\n[${new Date().toISOString()}] System Prompt:\n${system.join("\n")}\n\n`)
-    }
+    l.info("llm.prompt", {
+      content: system.join("\n\n")
+    })
 
     const variant =
       !input.small && input.model.variants && input.user.variant ? input.model.variants[input.user.variant] : {}
     const base = input.small
       ? ProviderTransform.smallOptions(input.model)
       : ProviderTransform.options({
-          model: input.model,
-          sessionID: input.sessionID,
-          providerOptions: provider.options,
-        })
+        model: input.model,
+        sessionID: input.sessionID,
+        providerOptions: provider.options,
+      })
     const options: Record<string, any> = pipe(
       base,
       mergeDeep(input.model.options),
@@ -142,22 +138,20 @@ export namespace LLM {
     const maxOutputTokens = isCodex
       ? undefined
       : ProviderTransform.maxOutputTokens(
-          input.model.api.npm,
-          params.options,
-          input.model.limit.output,
-          OUTPUT_TOKEN_MAX,
-        )
+        input.model.api.npm,
+        params.options,
+        input.model.limit.output,
+        OUTPUT_TOKEN_MAX,
+      )
 
-    if (Log.file()) {
-      Log.raw(`[${new Date().toISOString()}] Model Configuration:
-Provider: ${input.model.providerID}
-Model: ${input.model.id}
-Temperature: ${params.temperature ?? "N/A"}
-TopP: ${params.topP ?? "N/A"}
-TopK: ${params.topK ?? "N/A"}
-Options: ${JSON.stringify(params.options, null, 2)}
-`)
-    }
+    l.info("llm.config", {
+      provider: input.model.providerID,
+      model: input.model.id,
+      temperature: params.temperature,
+      topP: params.topP,
+      topK: params.topK,
+      options: params.options,
+    })
 
     const tools = await resolveTools(input)
 
@@ -219,22 +213,22 @@ Options: ${JSON.stringify(params.options, null, 2)}
       headers: {
         ...(isCodex
           ? {
-              originator: "opencode",
-              "User-Agent": `nuwaxcode/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
-              session_id: input.sessionID,
-            }
+            originator: "opencode",
+            "User-Agent": `nuwaxcode/${Installation.VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
+            session_id: input.sessionID,
+          }
           : undefined),
         ...(input.model.providerID.startsWith("opencode")
           ? {
-              "x-opencode-project": Instance.project.id,
-              "x-opencode-session": input.sessionID,
-              "x-opencode-request": input.user.id,
-              "x-opencode-client": Flag.OPENCODE_CLIENT,
-            }
+            "x-opencode-project": Instance.project.id,
+            "x-opencode-session": input.sessionID,
+            "x-opencode-request": input.user.id,
+            "x-opencode-client": Flag.OPENCODE_CLIENT,
+          }
           : input.model.providerID !== "anthropic"
             ? {
-                "User-Agent": `nuwaxcode/${Installation.VERSION}`,
-              }
+              "User-Agent": `nuwaxcode/${Installation.VERSION}`,
+            }
             : undefined),
         ...input.model.headers,
       },
@@ -242,17 +236,17 @@ Options: ${JSON.stringify(params.options, null, 2)}
       messages: [
         ...(isCodex
           ? [
-              {
-                role: "user",
-                content: system.join("\n\n"),
-              } as ModelMessage,
-            ]
+            {
+              role: "user",
+              content: system.join("\n\n"),
+            } as ModelMessage,
+          ]
           : system.map(
-              (x): ModelMessage => ({
-                role: "system",
-                content: x,
-              }),
-            )),
+            (x): ModelMessage => ({
+              role: "system",
+              content: x,
+            }),
+          )),
         ...input.messages,
       ],
       model: wrapLanguageModel({

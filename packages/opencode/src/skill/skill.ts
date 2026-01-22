@@ -74,6 +74,7 @@ export namespace Skill {
         description: parsed.data.description,
         location: match,
       }
+      log.info("skill.load", { name: parsed.data.name, location: match })
     }
 
     // Scan .claude/skills/ directories (project-level)

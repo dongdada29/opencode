@@ -8,7 +8,7 @@ mock.module("../../src/bun/index", () => ({
     install: async (pkg: string) => pkg,
     run: async () => { throw new Error("BunProc.run should not be called") },
     which: () => process.execPath,
-    InstallFailedError: class extends Error {},
+    InstallFailedError: class extends Error { },
   },
 }))
 
@@ -157,7 +157,7 @@ test("OpenAI provider DOES pick up OPENCODE_API_* fallback", async () => {
 test("OPENCODE_LOG_DIR sets log directory", async () => {
   await using tmp = await tmpdir({})
   const logDir = path.join(tmp.path, "env_logs")
-  
+
   await Instance.provide({
     directory: tmp.path,
     init: async () => {
@@ -174,14 +174,14 @@ test("OPENCODE_LOG_DIR sets log directory", async () => {
       // Write a test log entry
       const testLogger = Log.create({ service: "env-config-test" })
       testLogger.info("OPENCODE_LOG_DIR test log entry", { logDir, logFile })
-      
+
       // Flush and read log content
       await Log.flush()
       const logContent = await Bun.file(logFile).text()
       console.log("\n=== OPENCODE_LOG_DIR Test Log Content ===\n")
       console.log(logContent)
       console.log("=== End Log Content ===\n")
-      
+
       expect(logContent).toContain("env-config-test")
     }
   })
@@ -195,7 +195,7 @@ test("OPENCODE_MODEL + OPENCODE_LOG_DIR logs System Prompt and Model Configurati
   })
   const logDir = path.join(tmp.path, "llm_logs")
   const envModelValue = "anthropic/claude-3-5-sonnet"
-  
+
   await Instance.provide({
     directory: tmp.path,
     init: async () => {
@@ -209,7 +209,7 @@ test("OPENCODE_MODEL + OPENCODE_LOG_DIR logs System Prompt and Model Configurati
       console.log("\n=== ENV VAR → MODEL SELECTION CHAIN ===\n")
       console.log(`[1] OPENCODE_MODEL env var set to: ${readEnvModel}`)
       expect(readEnvModel).toBe(envModelValue)
-      
+
       // === STEP 2: Verify Provider.defaultModel() reads env var ===
       const model = await Provider.defaultModel()
       console.log(`[2] Provider.defaultModel() returns:`)
@@ -217,15 +217,15 @@ test("OPENCODE_MODEL + OPENCODE_LOG_DIR logs System Prompt and Model Configurati
       console.log(`    - modelID: ${model.modelID}`)
       expect(model.providerID).toBe("anthropic")
       expect(model.modelID).toBe("claude-3-5-sonnet")
-      
+
       // === STEP 3: Verify log directory from env var ===
       await Log.init({ print: false, dev: false, level: "INFO" } as any)
       const logFile = Log.file()
       console.log(`[3] OPENCODE_LOG_DIR creates log at: ${logFile}`)
       expect(logFile).toBeDefined()
       expect(logFile.startsWith(logDir)).toBe(true)
-      
-      // === STEP 4: Simulate LLM stream logging (matches src/session/llm.ts:100-159) ===
+
+      // === STEP 4: Simulate LLM stream logging matching src/session/llm.ts ===
       console.log(`[4] Simulating LLM stream with model from env var...`)
       const systemPrompt = ["You are OpenCode, the best coding agent.", "Help the user with coding tasks."]
       const modelConfig = {
@@ -236,38 +236,40 @@ test("OPENCODE_MODEL + OPENCODE_LOG_DIR logs System Prompt and Model Configurati
         topK: undefined,
         options: { maxTokens: 4096 }
       }
-      
-      // Write System Prompt (matches llm.ts format)
-      Log.raw(`\n[${new Date().toISOString()}] System Prompt:\n${systemPrompt.join("\n")}\n\n`)
-      
-      // Write Model Configuration (matches llm.ts format)
-      Log.raw(`[${new Date().toISOString()}] Model Configuration:
-Provider: ${modelConfig.providerID}
-Model: ${modelConfig.modelID}
-Temperature: ${modelConfig.temperature ?? "N/A"}
-TopP: ${modelConfig.topP ?? "N/A"}
-TopK: ${modelConfig.topK ?? "N/A"}
-Options: ${JSON.stringify(modelConfig.options, null, 2)}
-`)
-      
+
+      const testLogger = Log.create({ service: "llm" })
+
+      // Write System Prompt (matches formatted llm.ts)
+      testLogger.info("llm.prompt", { content: systemPrompt.join("\n\n") })
+
+      // Write Model Configuration (matches formatted llm.ts)
+      testLogger.info("llm.config", {
+        provider: modelConfig.providerID,
+        model: modelConfig.modelID,
+        temperature: modelConfig.temperature,
+        topP: modelConfig.topP,
+        topK: modelConfig.topK,
+        options: modelConfig.options
+      })
+
       // === STEP 5: Verify log content ===
       await Log.flush()
       const logContent = await Bun.file(logFile).text()
-      
+
       console.log(`\n[5] Log file content:\n`)
       console.log(logContent)
       console.log("=== END CHAIN VERIFICATION ===\n")
-      
+
       // Verify System Prompt logged
-      expect(logContent).toContain("System Prompt:")
+      expect(logContent).toContain("llm.prompt")
       expect(logContent).toContain("You are OpenCode")
-      
+
       // Verify Model Configuration contains the model from OPENCODE_MODEL env var
-      expect(logContent).toContain("Model Configuration:")
-      expect(logContent).toContain("Provider: anthropic")
-      expect(logContent).toContain("Model: claude-3-5-sonnet")  // ← Proves env var took effect!
-      expect(logContent).toContain("Temperature: 0.7")
-      expect(logContent).toContain("TopP: 0.95")
+      expect(logContent).toContain("llm.config")
+      expect(logContent).toContain("provider=anthropic")
+      expect(logContent).toContain("model=claude-3-5-sonnet")  // ← Proves env var took effect!
+      expect(logContent).toContain("temperature=0.7")
+      expect(logContent).toContain("topP=0.95")
       expect(logContent).toContain("maxTokens")
     }
   })
@@ -279,11 +281,11 @@ test("Combined: OPENCODE_MODEL + OPENCODE_OPENAI_API_BASE + OPENCODE_OPENAI_API_
       await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ $schema: "https://opencode.ai/config.json" }))
     },
   })
-  
+
   const envModel = "openai/gpt-4o"
   const envApiBase = "https://api.custom-llm.com/v1"
   const envApiKey = "sk-custom-key-12345"
-  
+
   await Instance.provide({
     directory: tmp.path,
     init: async () => {
@@ -293,13 +295,13 @@ test("Combined: OPENCODE_MODEL + OPENCODE_OPENAI_API_BASE + OPENCODE_OPENAI_API_
     },
     fn: async () => {
       console.log("\n=== COMBINED ENV VAR TEST: MODEL + API_BASE + API_KEY ===\n")
-      
+
       // 1. Verify env vars are set
       console.log(`[1] Environment variables set:`)
       console.log(`    OPENCODE_MODEL = ${Env.get("OPENCODE_MODEL")}`)
       console.log(`    OPENCODE_OPENAI_API_BASE = ${Env.get("OPENCODE_OPENAI_API_BASE")}`)
       console.log(`    OPENCODE_OPENAI_API_KEY = ${Env.get("OPENCODE_OPENAI_API_KEY")?.slice(0, 10)}...`)
-      
+
       // 2. Verify model selection from OPENCODE_MODEL
       const model = await Provider.defaultModel()
       console.log(`[2] Provider.defaultModel() returns:`)
@@ -307,7 +309,7 @@ test("Combined: OPENCODE_MODEL + OPENCODE_OPENAI_API_BASE + OPENCODE_OPENAI_API_
       console.log(`    modelID: ${model.modelID}`)
       expect(model.providerID).toBe("openai")
       expect(model.modelID).toBe("gpt-4o")
-      
+
       // 3. Verify provider options from OPENCODE_OPENAI_API_BASE/KEY
       const providers = await Provider.list()
       const openai = providers["openai"]
@@ -317,7 +319,7 @@ test("Combined: OPENCODE_MODEL + OPENCODE_OPENAI_API_BASE + OPENCODE_OPENAI_API_
       expect(openai).toBeDefined()
       expect(openai.options.baseURL).toBe(envApiBase)
       expect(openai.options.apiKey).toBe(envApiKey)
-      
+
       console.log("\n=== ALL COMBINED ENV VARS VERIFIED ===\n")
     }
   })

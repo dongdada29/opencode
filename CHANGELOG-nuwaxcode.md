@@ -2,6 +2,20 @@
 
 本文档总结了 `feat/nuwaxcode` 分支相对于主分支的主要更改。
 
+## v1.1.49
+
+### ✨ 新特性
+
+- **Logging**: 新增初始化性能追踪 (`bun.install`, `plugin.load`, `provider.state`)，帮助诊断启动耗时。
+- **ACP**: `acp.message.part` 事件现在记录双向消息（用户输入与模型回复），提供完整会话视图。
+- **Config**: 增强配置日志，`system.env` 和 `config.load` 现在包含完整的（已脱敏）配置状态。
+
+### 📝 文档
+
+- **CONFIGURATION**: 更新中文配置文档，新增 "Observability & Log Reference" 章节，详细列出所有日志事件及其含义。
+
+---
+
 ## v1.1.48
 
 ### 🐛 修复

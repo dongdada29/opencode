@@ -140,6 +140,8 @@ export namespace ACP {
                 return
               }
 
+              log.info("acp.permission.result", { permissionID: permission.id, outcome: res.outcome })
+
               if (res.outcome.optionId !== "reject" && permission.permission == "edit") {
                 const metadata = permission.metadata || {}
                 const filepath = typeof metadata["filepath"] === "string" ? metadata["filepath"] : ""
@@ -176,7 +178,7 @@ export namespace ACP {
         }
 
         case "message.part.updated": {
-          log.info("message part updated", { event: event.properties })
+          log.info("acp.message.part", { event: event.properties })
           const props = event.properties
           const part = props.part
           const session = this.sessionManager.tryGet(part.sessionID)
@@ -217,6 +219,9 @@ export namespace ACP {
                       rawInput: {},
                     },
                   })
+                  .then(() => {
+                    log.info("acp.tool.update", { status: "pending", toolCallId: part.callID, tool: part.tool })
+                  })
                   .catch((error) => {
                     log.error("failed to send tool pending to ACP", { error })
                   })
@@ -235,6 +240,9 @@ export namespace ACP {
                       locations: toLocations(part.tool, part.state.input),
                       rawInput: part.state.input,
                     },
+                  })
+                  .then(() => {
+                    log.info("acp.tool.update", { status: "in_progress", toolCallId: part.callID, tool: part.tool })
                   })
                   .catch((error) => {
                     log.error("failed to send tool in_progress to ACP", { error })
@@ -315,6 +323,9 @@ export namespace ACP {
                       },
                     },
                   })
+                  .then(() => {
+                    log.info("acp.tool.update", { status: "completed", toolCallId: part.callID, tool: part.state.title })
+                  })
                   .catch((error) => {
                     log.error("failed to send tool completed to ACP", { error })
                   })
@@ -344,6 +355,9 @@ export namespace ACP {
                         error: part.state.error,
                       },
                     },
+                  })
+                  .then(() => {
+                    log.info("acp.tool.update", { status: "error", toolCallId: part.callID, tool: part.tool, error: part.state.error })
                   })
                   .catch((error) => {
                     log.error("failed to send tool error to ACP", { error })
@@ -398,7 +412,7 @@ export namespace ACP {
     }
 
     async initialize(params: InitializeRequest): Promise<InitializeResponse> {
-      log.info("initialize", { protocolVersion: params.protocolVersion })
+      log.info("acp.initialize", { protocolVersion: params.protocolVersion, clientCapabilities: params.clientCapabilities, clientInfo: params.clientInfo })
 
       const authMethod: AuthMethod = {
         description: "Run `nuwaxcode auth login` in the terminal",
@@ -454,7 +468,7 @@ export namespace ACP {
         const state = await this.sessionManager.create(params.cwd, params.mcpServers, model, systemPrompt)
         const sessionId = state.id
 
-        log.info("creating_session", { sessionId, mcpServers: params.mcpServers.length, hasSystemPrompt: !!systemPrompt })
+        log.info("session.create", { sessionId, cwd: params.cwd, mcpServers: params.mcpServers, hasSystemPrompt: !!systemPrompt })
 
         const load = await this.loadSessionMode({
           cwd: directory,
@@ -489,7 +503,7 @@ export namespace ACP {
         // Store ACP session state
         await this.sessionManager.load(sessionId, params.cwd, params.mcpServers, model)
 
-        log.info("load_session", { sessionId, mcpServers: params.mcpServers.length })
+        log.info("session.load", { sessionId, mcpServers: params.mcpServers.length })
 
         const result = await this.loadSessionMode({
           cwd: directory,
@@ -763,10 +777,10 @@ export namespace ACP {
               const isText = effectiveMime.startsWith("text/") || effectiveMime === "application/json"
               const resource = isText
                 ? {
-                    uri: `file://${filename}`,
-                    mimeType: effectiveMime,
-                    text: Buffer.from(base64Data, "base64").toString("utf-8"),
-                  }
+                  uri: `file://${filename}`,
+                  mimeType: effectiveMime,
+                  text: Buffer.from(base64Data, "base64").toString("utf-8"),
+                }
                 : { uri: `file://${filename}`, mimeType: effectiveMime, blob: base64Data }
 
               await this.connection

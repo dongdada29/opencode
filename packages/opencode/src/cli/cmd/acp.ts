@@ -64,6 +64,13 @@ export const AcpCommand = cmd({
         process.stdin.on("end", resolve)
         process.stdin.on("error", reject)
       })
+        .then(() => {
+          log.info("acp.shutdown.success")
+        })
+        .catch((error) => {
+          log.error("acp.shutdown.error", { error })
+          throw error
+        })
     })
   },
 })

@@ -132,17 +132,25 @@ export namespace MCP {
       description: mcpTool.description ?? "",
       inputSchema: jsonSchema(schema),
       execute: async (args: unknown) => {
-        return client.callTool(
-          {
-            name: mcpTool.name,
-            arguments: args as Record<string, unknown>,
-          },
-          CallToolResultSchema,
-          {
-            resetTimeoutOnProgress: true,
-            timeout,
-          },
-        )
+        const timer = log.time("mcp.tool.execute", { tool: mcpTool.name, args: JSON.stringify(args) })
+        try {
+          const result = await client.callTool(
+            {
+              name: mcpTool.name,
+              arguments: args as Record<string, unknown>,
+            },
+            CallToolResultSchema,
+            {
+              resetTimeoutOnProgress: true,
+              timeout,
+            },
+          )
+          timer.stop()
+          return result
+        } catch (error) {
+          log.error("mcp.tool.execute failed", { tool: mcpTool.name, error })
+          throw error
+        }
       },
     })
   }
@@ -409,7 +417,7 @@ export namespace MCP {
       const [cmd, ...args] = mcp.command
       const cwd = Instance.directory
       const transport = new StdioClientTransport({
-        stderr: "ignore",
+        stderr: (chunk) => log.info("mcp.stderr", { key, chunk }),
         command: cmd,
         args,
         cwd,
