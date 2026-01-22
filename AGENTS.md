@@ -3,11 +3,11 @@
 - ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
 - The default branch in this repo is `feat/nuwaxcode`.
 - **Release Workflow**:
-  1. **Update Version**:
-     - `CHANGELOG-nuwaxcode.md`: Add new version entry.
-     - `packages/opencode/package.json`: Bump `version` AND sync all `optionalDependencies` versions.
-  2. **Publish**:
-     - Run: `cd packages/opencode && bun run publish --latest`
-     - **Flags**:
-       - `--latest`: REQUIRED to update the `latest` tag on NPM (otherwise it only publishes to the branch tag).
-       - `--no-otp`: Skip the interactive OTP prompt (use if 2FA is handled externally or not required).
+  1. **Changelog**: Update `CHANGELOG-nuwaxcode.md` with new version details.
+  2. **Run Script**:
+     - Run: `./release.sh <new_version>` (e.g., `./release.sh 1.1.52`)
+     - The script will automatically:
+       - Bump version in `packages/opencode/package.json`.
+       - Sync all `optionalDependencies`.
+       - Run `publish` with `--latest`.
+       - (Optional) Pass OTP as second argument: `./release.sh 1.1.52 123456`
