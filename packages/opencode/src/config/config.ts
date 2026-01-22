@@ -43,7 +43,9 @@ export namespace Config {
     const envVars = Object.keys(process.env).reduce(
       (acc, key) => {
         const isSensitive =
-          /(_KEY|_SECRET|_TOKEN|_PASSWORD|_CREDENTIAL)/i.test(key) && key !== "OPENCODE_MAX_TOKENS"
+          /(_KEY|_SECRET|_TOKEN|_PASSWORD|_CREDENTIAL)/i.test(key) &&
+          key !== "OPENCODE_MAX_TOKENS" &&
+          key !== "OPENCODE_MAX_CONTEXT_TOKENS"
         acc[key] = isSensitive ? "******" : process.env[key]
         return acc
       },

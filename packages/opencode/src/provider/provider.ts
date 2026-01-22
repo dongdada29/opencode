@@ -102,6 +102,12 @@ export namespace Provider {
           ...(apiKey ? { apiKey } : {}),
           ...(Env.get("OPENCODE_MAX_TOKENS") ? { max_tokens: parseInt(Env.get("OPENCODE_MAX_TOKENS")!) } : {}),
           ...(provider?.options?.max_tokens ? { max_tokens: provider.options.max_tokens } : {}),
+          ...(Env.get("OPENCODE_MAX_CONTEXT_TOKENS")
+            ? { max_context_tokens: parseInt(Env.get("OPENCODE_MAX_CONTEXT_TOKENS")!) }
+            : {}),
+          ...(provider?.options?.max_context_tokens
+            ? { max_context_tokens: provider.options.max_context_tokens }
+            : {}),
         },
         getModel: autoload
           ? async (sdk: any, modelID: string, _options: unknown) => {
@@ -155,6 +161,12 @@ export namespace Provider {
           ...(apiKey ? { apiKey } : {}),
           ...(Env.get("OPENCODE_MAX_TOKENS") ? { max_tokens: parseInt(Env.get("OPENCODE_MAX_TOKENS")!) } : {}),
           ...(provider?.options?.max_tokens ? { max_tokens: provider.options.max_tokens } : {}),
+          ...(Env.get("OPENCODE_MAX_CONTEXT_TOKENS")
+            ? { max_context_tokens: parseInt(Env.get("OPENCODE_MAX_CONTEXT_TOKENS")!) }
+            : {}),
+          ...(provider?.options?.max_context_tokens
+            ? { max_context_tokens: provider.options.max_context_tokens }
+            : {}),
         },
         getModel: autoload
           ? async (sdk: any, modelID: string, _options: unknown) => {
@@ -620,6 +632,12 @@ export namespace Provider {
           ...(apiKey ? { apiKey } : {}),
           ...(Env.get("OPENCODE_MAX_TOKENS") ? { max_tokens: parseInt(Env.get("OPENCODE_MAX_TOKENS")!) } : {}),
           ...(provider?.options?.max_tokens ? { max_tokens: provider.options.max_tokens } : {}),
+          ...(Env.get("OPENCODE_MAX_CONTEXT_TOKENS")
+            ? { max_context_tokens: parseInt(Env.get("OPENCODE_MAX_CONTEXT_TOKENS")!) }
+            : {}),
+          ...(provider?.options?.max_context_tokens
+            ? { max_context_tokens: provider.options.max_context_tokens }
+            : {}),
         },
         getModel: autoload
           ? async (sdk: any, modelID: string, _options: unknown) => {
@@ -950,7 +968,12 @@ export namespace Provider {
           },
           options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
           limit: {
-            context: model.limit?.context ?? existingModel?.limit?.context ?? 0,
+            context:
+              model.options?.max_context_tokens ??
+              provider.options?.max_context_tokens ??
+              (Env.get("OPENCODE_MAX_CONTEXT_TOKENS")
+                ? parseInt(Env.get("OPENCODE_MAX_CONTEXT_TOKENS")!)
+                : (model.limit?.context ?? existingModel?.limit?.context ?? 0)),
             output: model.limit?.output ?? existingModel?.limit?.output ?? 0,
           },
           headers: mergeDeep(existingModel?.headers ?? {}, model.headers ?? {}),
