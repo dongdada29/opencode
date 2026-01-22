@@ -417,7 +417,6 @@ export namespace MCP {
       const [cmd, ...args] = mcp.command
       const cwd = Instance.directory
       const transport = new StdioClientTransport({
-        stderr: (chunk) => log.info("mcp.stderr", { key, chunk }),
         command: cmd,
         args,
         cwd,

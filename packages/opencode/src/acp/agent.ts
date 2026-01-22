@@ -249,6 +249,7 @@ export namespace ACP {
                   })
                 return
 
+
               case "completed": {
                 const kind = toToolKind(part.tool)
                 const content: ToolCallContent[] = [
@@ -306,6 +307,10 @@ export namespace ACP {
                   }
                 }
 
+                const toolName = part.tool
+                // Extract title here to preserve TS narrowing
+                const toolTitle = part.state.title
+
                 await this.connection
                   .sessionUpdate({
                     sessionId,
@@ -315,7 +320,7 @@ export namespace ACP {
                       status: "completed",
                       kind,
                       content,
-                      title: part.state.title,
+                      title: toolTitle,
                       rawInput: part.state.input,
                       rawOutput: {
                         output: part.state.output,
@@ -324,14 +329,16 @@ export namespace ACP {
                     },
                   })
                   .then(() => {
-                    log.info("acp.tool.update", { status: "completed", toolCallId: part.callID, tool: part.state.title })
+                    log.info("acp.tool.update", { status: "completed", toolCallId: part.callID, tool: toolName, title: toolTitle })
                   })
                   .catch((error) => {
                     log.error("failed to send tool completed to ACP", { error })
                   })
                 return
               }
-              case "error":
+              case "error": {
+                const toolName = part.tool
+                const errorText = part.state.error
                 await this.connection
                   .sessionUpdate({
                     sessionId,
@@ -357,12 +364,13 @@ export namespace ACP {
                     },
                   })
                   .then(() => {
-                    log.info("acp.tool.update", { status: "error", toolCallId: part.callID, tool: part.tool, error: part.state.error })
+                    log.info("acp.tool.update", { status: "error", toolCallId: part.callID, tool: toolName, error: errorText })
                   })
                   .catch((error) => {
                     log.error("failed to send tool error to ACP", { error })
                   })
                 return
+              }
             }
           }
 
