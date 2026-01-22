@@ -523,6 +523,10 @@ export namespace ProviderTransform {
   }): Record<string, any> {
     const result: Record<string, any> = {}
 
+    if (input.providerOptions?.max_tokens) {
+      result["max_tokens"] = input.providerOptions.max_tokens
+    }
+
     // openai and providers using openai package should set store to false by default.
     if (
       input.model.providerID === "openai" ||
@@ -626,6 +630,10 @@ export namespace ProviderTransform {
   ): number {
     const modelCap = modelLimit || globalLimit
     const standardLimit = Math.min(modelCap, globalLimit)
+
+    if (options?.max_tokens) {
+      return options.max_tokens
+    }
 
     if (npm === "@ai-sdk/anthropic") {
       const thinking = options?.["thinking"]

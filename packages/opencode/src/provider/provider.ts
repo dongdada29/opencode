@@ -86,7 +86,7 @@ export namespace Provider {
   }>
 
   const CUSTOM_LOADERS: Record<string, CustomLoader> = {
-    async anthropic() {
+    async anthropic(provider) {
       const baseURL = Env.get("OPENCODE_ANTHROPIC_API_BASE") ?? Env.get("ANTHROPIC_BASE_URL")
       const apiKey = Env.get("OPENCODE_ANTHROPIC_API_KEY") ?? Env.get("ANTHROPIC_API_KEY")
       const autoload = !!(baseURL || apiKey)
@@ -100,91 +100,95 @@ export namespace Provider {
           },
           ...(baseURL ? { baseURL } : {}),
           ...(apiKey ? { apiKey } : {}),
+          ...(Env.get("OPENCODE_MAX_TOKENS") ? { max_tokens: parseInt(Env.get("OPENCODE_MAX_TOKENS")!) } : {}),
+          ...(provider.options?.max_tokens ? { max_tokens: provider.options.max_tokens } : {}),
         },
         getModel: autoload
           ? async (sdk: any, modelID: string, _options: unknown) => {
-              try {
-                const safeKey = apiKey ? (apiKey.slice(0, 3) + "..." + apiKey.slice(-4)) : "undefined"
-                log.info("loading anthropic model provider", { modelID, baseURL, apiKey: safeKey })
-                
-                if (typeof sdk === 'function' && typeof sdk.languageModel === 'function') {
-                     return sdk.languageModel(modelID)
-                } else if (typeof sdk === 'function') {
-                     return sdk(modelID)
-                } else {
-                     log.warn("sdk does not look like a provider, recreating", { type: typeof sdk })
-                     const { createAnthropic } = await import("@ai-sdk/anthropic")
-                     const provider = createAnthropic({
-                        baseURL: baseURL!,
-                        apiKey: apiKey!,
-                         headers: {
-                            "anthropic-beta":
-                              "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
-                          },
-                     })
-                     return provider.languageModel(modelID)
-                }
-              } catch (e: any) {
-                log.error("failed to load anthropic model", { error: e.message, stack: e.stack })
-                throw e
+            try {
+              const safeKey = apiKey ? (apiKey.slice(0, 3) + "..." + apiKey.slice(-4)) : "undefined"
+              log.info("loading anthropic model provider", { modelID, baseURL, apiKey: safeKey })
+
+              if (typeof sdk === 'function' && typeof sdk.languageModel === 'function') {
+                return sdk.languageModel(modelID)
+              } else if (typeof sdk === 'function') {
+                return sdk(modelID)
+              } else {
+                log.warn("sdk does not look like a provider, recreating", { type: typeof sdk })
+                const { createAnthropic } = await import("@ai-sdk/anthropic")
+                const provider = createAnthropic({
+                  baseURL: baseURL!,
+                  apiKey: apiKey!,
+                  headers: {
+                    "anthropic-beta":
+                      "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+                  },
+                })
+                return provider.languageModel(modelID)
               }
+            } catch (e: any) {
+              log.error("failed to load anthropic model", { error: e.message, stack: e.stack })
+              throw e
             }
+          }
           : undefined,
       }
     },
-    async "anthropic-compatible"() {
-       // Re-use logic for anthropic but allows for a distinct provider ID
-       let baseURL = Env.get("OPENCODE_ANTHROPIC_API_BASE") ?? Env.get("ANTHROPIC_BASE_URL")
-       // Check if baseURL is provided and doesn't end with /v1
-       if (baseURL && !baseURL.endsWith("/v1") && !baseURL.endsWith("/v1/")) {
-         baseURL = baseURL.replace(/\/$/, "") + "/v1"
-       }
-       const apiKey = Env.get("OPENCODE_ANTHROPIC_API_KEY") ?? Env.get("ANTHROPIC_API_KEY")
-       const autoload = !!(baseURL || apiKey)
- 
-       return {
-         autoload,
-         options: {
-           headers: {
-             "anthropic-beta":
-               "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
-           },
-           ...(baseURL ? { baseURL } : {}),
-           ...(apiKey ? { apiKey } : {}),
-         },
-         getModel: autoload
-           ? async (sdk: any, modelID: string, _options: unknown) => {
-               try {
-                 const safeKey = apiKey ? (apiKey.slice(0, 3) + "..." + apiKey.slice(-4)) : "undefined"
-                 log.info("loading anthropic-compatible model provider", { modelID, baseURL, apiKey: safeKey })
-                 
-                 // Reuse anthropic creation logic
-                 if (typeof sdk === 'function' && typeof sdk.languageModel === 'function') {
-                      return sdk.languageModel(modelID)
-                 } else if (typeof sdk === 'function') {
-                      return sdk(modelID)
-                 } else {
-                      log.warn("sdk does not look like a provider, recreating", { type: typeof sdk })
-                      const { createAnthropic } = await import("@ai-sdk/anthropic")
-                      const provider = createAnthropic({
-                         // allow specifying specific name for compatible provider? 
-                         // createAnthropic options usually don't take 'name' but we pass options to it
-                         baseURL: baseURL!,
-                         apiKey: apiKey!,
-                          headers: {
-                             "anthropic-beta":
-                               "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
-                           },
-                      })
-                      return provider.languageModel(modelID)
-                 }
-               } catch (e: any) {
-                 log.error("failed to load anthropic-compatible model", { error: e.message, stack: e.stack })
-                 throw e
-               }
-             }
-           : undefined,
-       }
+    async "anthropic-compatible"(provider) {
+      // Re-use logic for anthropic but allows for a distinct provider ID
+      let baseURL = Env.get("OPENCODE_ANTHROPIC_API_BASE") ?? Env.get("ANTHROPIC_BASE_URL")
+      // Check if baseURL is provided and doesn't end with /v1
+      if (baseURL && !baseURL.endsWith("/v1") && !baseURL.endsWith("/v1/")) {
+        baseURL = baseURL.replace(/\/$/, "") + "/v1"
+      }
+      const apiKey = Env.get("OPENCODE_ANTHROPIC_API_KEY") ?? Env.get("ANTHROPIC_API_KEY")
+      const autoload = !!(baseURL || apiKey)
+
+      return {
+        autoload,
+        options: {
+          headers: {
+            "anthropic-beta":
+              "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+          },
+          ...(baseURL ? { baseURL } : {}),
+          ...(apiKey ? { apiKey } : {}),
+          ...(Env.get("OPENCODE_MAX_TOKENS") ? { max_tokens: parseInt(Env.get("OPENCODE_MAX_TOKENS")!) } : {}),
+          ...(provider.options?.max_tokens ? { max_tokens: provider.options.max_tokens } : {}),
+        },
+        getModel: autoload
+          ? async (sdk: any, modelID: string, _options: unknown) => {
+            try {
+              const safeKey = apiKey ? (apiKey.slice(0, 3) + "..." + apiKey.slice(-4)) : "undefined"
+              log.info("loading anthropic-compatible model provider", { modelID, baseURL, apiKey: safeKey })
+
+              // Reuse anthropic creation logic
+              if (typeof sdk === 'function' && typeof sdk.languageModel === 'function') {
+                return sdk.languageModel(modelID)
+              } else if (typeof sdk === 'function') {
+                return sdk(modelID)
+              } else {
+                log.warn("sdk does not look like a provider, recreating", { type: typeof sdk })
+                const { createAnthropic } = await import("@ai-sdk/anthropic")
+                const provider = createAnthropic({
+                  // allow specifying specific name for compatible provider? 
+                  // createAnthropic options usually don't take 'name' but we pass options to it
+                  baseURL: baseURL!,
+                  apiKey: apiKey!,
+                  headers: {
+                    "anthropic-beta":
+                      "claude-code-20250219,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+                  },
+                })
+                return provider.languageModel(modelID)
+              }
+            } catch (e: any) {
+              log.error("failed to load anthropic-compatible model", { error: e.message, stack: e.stack })
+              throw e
+            }
+          }
+          : undefined,
+      }
     },
     async opencode(input) {
       const hasKey = await (async () => {
@@ -602,7 +606,7 @@ export namespace Provider {
         },
       }
     },
-    "openai-compatible": async () => {
+    "openai-compatible": async (provider) => {
       const baseURL =
         Env.get("OPENCODE_OPENAI_API_BASE") ?? Env.get("OPENCODE_API_BASE") ?? Env.get("OPENAI_BASE_URL")
       const apiKey =
@@ -614,46 +618,48 @@ export namespace Provider {
         options: {
           ...(baseURL ? { baseURL } : {}),
           ...(apiKey ? { apiKey } : {}),
+          ...(Env.get("OPENCODE_MAX_TOKENS") ? { max_tokens: parseInt(Env.get("OPENCODE_MAX_TOKENS")!) } : {}),
+          ...(provider.options?.max_tokens ? { max_tokens: provider.options.max_tokens } : {}),
         },
         getModel: autoload
           ? async (sdk: any, modelID: string, _options: unknown) => {
-              try {
-                // sdk is already initialized with baseURL and apiKey by getSDK
-                const safeKey = apiKey ? (apiKey.slice(0, 3) + "..." + apiKey.slice(-4)) : "undefined"
-                log.info("loading openai-compatible model provider", { modelID, baseURL, apiKey: safeKey })
-                
-                // Inspecting the SDK object for debugging
-                // log.info("sdk keys", { keys: Object.keys(sdk || {}) })
+            try {
+              // sdk is already initialized with baseURL and apiKey by getSDK
+              const safeKey = apiKey ? (apiKey.slice(0, 3) + "..." + apiKey.slice(-4)) : "undefined"
+              log.info("loading openai-compatible model provider", { modelID, baseURL, apiKey: safeKey })
 
-                // Providing fallback if sdk structure is unexpected
-                if (typeof sdk === 'function' && typeof sdk.chatModel === 'function') {
-                    // It might be a provider instance directly? No, createOpenAICompatible returns an object with methods usually?
-                    // Let's assume standard AI SDK provider interface
-                     log.info("using sdk.chatModel")
-                     return sdk.chatModel(modelID)
-                } else if (typeof sdk === 'function') {
-                    // Some providers are just functions you call with modelID
-                     log.info("using sdk as function")
-                     return sdk(modelID)
-                } else if (sdk && sdk.languageModel) {
-                     log.info("using sdk.languageModel")
-                     return sdk.languageModel(modelID)
-                } else {
-                     // Fallback to recreating if sdk is not what we expect (though getSDK should have returned the right thing)
-                     log.warn("sdk does not look like a provider, recreating")
-                     const { createOpenAICompatible } = await import("@ai-sdk/openai-compatible")
-                     const provider = createOpenAICompatible({
-                        name: "openai-compatible",
-                        baseURL: baseURL!,
-                        apiKey: apiKey!,
-                     })
-                     return provider.chatModel(modelID)
-                }
-              } catch (e: any) {
-                log.error("failed to load openai-compatible model", { error: e.message, stack: e.stack })
-                throw e
+              // Inspecting the SDK object for debugging
+              // log.info("sdk keys", { keys: Object.keys(sdk || {}) })
+
+              // Providing fallback if sdk structure is unexpected
+              if (typeof sdk === 'function' && typeof sdk.chatModel === 'function') {
+                // It might be a provider instance directly? No, createOpenAICompatible returns an object with methods usually?
+                // Let's assume standard AI SDK provider interface
+                log.info("using sdk.chatModel")
+                return sdk.chatModel(modelID)
+              } else if (typeof sdk === 'function') {
+                // Some providers are just functions you call with modelID
+                log.info("using sdk as function")
+                return sdk(modelID)
+              } else if (sdk && sdk.languageModel) {
+                log.info("using sdk.languageModel")
+                return sdk.languageModel(modelID)
+              } else {
+                // Fallback to recreating if sdk is not what we expect (though getSDK should have returned the right thing)
+                log.warn("sdk does not look like a provider, recreating")
+                const { createOpenAICompatible } = await import("@ai-sdk/openai-compatible")
+                const provider = createOpenAICompatible({
+                  name: "openai-compatible",
+                  baseURL: baseURL!,
+                  apiKey: apiKey!,
+                })
+                return provider.chatModel(modelID)
               }
+            } catch (e: any) {
+              log.error("failed to load openai-compatible model", { error: e.message, stack: e.stack })
+              throw e
             }
+          }
           : undefined,
       }
     },
@@ -771,13 +777,13 @@ export namespace Provider {
         },
         experimentalOver200K: model.cost?.context_over_200k
           ? {
-              cache: {
-                read: model.cost.context_over_200k.cache_read ?? 0,
-                write: model.cost.context_over_200k.cache_write ?? 0,
-              },
-              input: model.cost.context_over_200k.input,
-              output: model.cost.context_over_200k.output,
-            }
+            cache: {
+              read: model.cost.context_over_200k.cache_read ?? 0,
+              write: model.cost.context_over_200k.cache_write ?? 0,
+            },
+            input: model.cost.context_over_200k.input,
+            output: model.cost.context_over_200k.output,
+          }
           : undefined,
       },
       limit: {
@@ -1052,7 +1058,7 @@ export namespace Provider {
               if (envModel && envModel.startsWith("openai-compatible/")) {
                 const modelID = envModel.split("/")[1]
                 if (modelID) {
-                   models[modelID] = {
+                  models[modelID] = {
                     id: modelID,
                     providerID: "openai-compatible",
                     name: modelID,
@@ -1064,32 +1070,32 @@ export namespace Provider {
                       npm: "@ai-sdk/openai-compatible",
                     },
                     capabilities: {
-                       temperature: true,
-                       reasoning: false,
-                       attachment: false,
-                       toolcall: false,
-                       input: { text: true, audio: false, image: false, video: false, pdf: false },
-                       output: { text: true, audio: false, image: false, video: false, pdf: false },
-                       interleaved: false,
+                      temperature: true,
+                      reasoning: false,
+                      attachment: false,
+                      toolcall: false,
+                      input: { text: true, audio: false, image: false, video: false, pdf: false },
+                      output: { text: true, audio: false, image: false, video: false, pdf: false },
+                      interleaved: false,
                     },
                     cost: {
-                        input: 0,
-                        output: 0,
-                        cache: { read: 0, write: 0 }
+                      input: 0,
+                      output: 0,
+                      cache: { read: 0, write: 0 }
                     },
                     limit: {
-                        context: 128000,
-                        output: 4096
+                      context: 128000,
+                      output: 8000
                     },
                     options: {},
                     headers: {}
-                   }
-                   log.info("pre-populated dynamic model", { modelID })
+                  }
+                  log.info("pre-populated dynamic model", { modelID })
                 }
               }
 
-                  // Create a minimal provider entry for openai-compatible
-               providers[providerID] = {
+              // Create a minimal provider entry for openai-compatible
+              providers[providerID] = {
                 id: providerID,
                 name: "OpenAI Compatible",
                 source: "custom",
@@ -1101,7 +1107,7 @@ export namespace Provider {
               log.info("created dynamic provider", { providerID })
             }
           } catch (e: any) {
-             log.error("failed to create dynamic openai-compatible provider", { error: e.message })
+            log.error("failed to create dynamic openai-compatible provider", { error: e.message })
           }
           continue
         }
@@ -1117,7 +1123,7 @@ export namespace Provider {
               if (envModel && envModel.startsWith("anthropic/")) {
                 const modelID = envModel.split("/")[1]
                 if (modelID) {
-                   models[modelID] = {
+                  models[modelID] = {
                     id: modelID,
                     providerID: "anthropic",
                     name: modelID,
@@ -1125,20 +1131,20 @@ export namespace Provider {
                     release_date: new Date().toISOString().split("T")[0],
                     api: { id: modelID, url: "", npm: "@ai-sdk/anthropic" },
                     capabilities: {
-                       temperature: true,
-                       reasoning: false,
-                       attachment: false,
-                       toolcall: false,
-                       input: { text: true, audio: false, image: false, video: false, pdf: false },
-                       output: { text: true, audio: false, image: false, video: false, pdf: false },
-                       interleaved: false,
+                      temperature: true,
+                      reasoning: false,
+                      attachment: false,
+                      toolcall: false,
+                      input: { text: true, audio: false, image: false, video: false, pdf: false },
+                      output: { text: true, audio: false, image: false, video: false, pdf: false },
+                      interleaved: false,
                     },
                     cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-                    limit: { context: 128000, output: 4096 },
+                    limit: { context: 128000, output: 8000 },
                     options: {},
                     headers: {}
-                   }
-                   log.info("pre-populated dynamic anthropic model", { modelID })
+                  }
+                  log.info("pre-populated dynamic anthropic model", { modelID })
                 }
               }
               providers[providerID] = {
@@ -1153,7 +1159,7 @@ export namespace Provider {
               log.info("created dynamic anthropic provider", { providerID })
             }
           } catch (e: any) {
-             log.error("failed to create dynamic anthropic provider", { error: e.message })
+            log.error("failed to create dynamic anthropic provider", { error: e.message })
           }
           continue
         }
@@ -1170,7 +1176,7 @@ export namespace Provider {
               if (envModel && envModel.startsWith("anthropic-compatible/")) {
                 const modelID = envModel.split("/")[1]
                 if (modelID) {
-                   models[modelID] = {
+                  models[modelID] = {
                     id: modelID,
                     providerID: "anthropic-compatible",
                     name: modelID,
@@ -1178,20 +1184,20 @@ export namespace Provider {
                     release_date: new Date().toISOString().split("T")[0],
                     api: { id: modelID, url: "", npm: "@ai-sdk/anthropic" },
                     capabilities: {
-                       temperature: true,
-                       reasoning: false,
-                       attachment: false,
-                       toolcall: false,
-                       input: { text: true, audio: false, image: false, video: false, pdf: false },
-                       output: { text: true, audio: false, image: false, video: false, pdf: false },
-                       interleaved: false,
+                      temperature: true,
+                      reasoning: false,
+                      attachment: false,
+                      toolcall: false,
+                      input: { text: true, audio: false, image: false, video: false, pdf: false },
+                      output: { text: true, audio: false, image: false, video: false, pdf: false },
+                      interleaved: false,
                     },
                     cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-                    limit: { context: 128000, output: 4096 },
+                    limit: { context: 128000, output: 8000 },
                     options: {},
                     headers: {}
-                   }
-                   log.info("pre-populated dynamic anthropic-compatible model", { modelID })
+                  }
+                  log.info("pre-populated dynamic anthropic-compatible model", { modelID })
                 }
               }
               providers[providerID] = {
@@ -1206,7 +1212,7 @@ export namespace Provider {
               log.info("created dynamic anthropic-compatible provider", { providerID })
             }
           } catch (e: any) {
-             log.error("failed to create dynamic anthropic-compatible provider", { error: e.message })
+            log.error("failed to create dynamic anthropic-compatible provider", { error: e.message })
           }
           continue
         }
@@ -1222,37 +1228,37 @@ export namespace Provider {
           source: "custom",
           options: result.options,
         })
-        
+
         // Dynamic model injection for existing providers (specifically anthropic)
         const envModel = Env.get("OPENCODE_MODEL")
         if (envModel && envModel.startsWith(providerID + "/")) {
-             const modelID = envModel.split("/")[1]
-             if (modelID && providers[providerID] && !providers[providerID].models[modelID]) {
-                  if (providerID === "anthropic") {
-                      providers[providerID].models[modelID] = {
-                        id: modelID,
-                        providerID: providerID,
-                        name: modelID,
-                        status: "active",
-                        release_date: new Date().toISOString().split("T")[0],
-                        api: { id: modelID, url: "", npm: "@ai-sdk/anthropic" },
-                        capabilities: {
-                           temperature: true,
-                           reasoning: false,
-                           attachment: false,
-                           toolcall: false,
-                           input: { text: true, audio: false, image: false, video: false, pdf: false },
-                           output: { text: true, audio: false, image: false, video: false, pdf: false },
-                           interleaved: false,
-                        },
-                        cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-                        limit: { context: 128000, output: 4096 },
-                        options: {},
-                        headers: {}
-                      }
-                      log.info("injected dynamic anthropic model", { modelID })
-                  }
-             }
+          const modelID = envModel.split("/")[1]
+          if (modelID && providers[providerID] && !providers[providerID].models[modelID]) {
+            if (providerID === "anthropic") {
+              providers[providerID].models[modelID] = {
+                id: modelID,
+                providerID: providerID,
+                name: modelID,
+                status: "active",
+                release_date: new Date().toISOString().split("T")[0],
+                api: { id: modelID, url: "", npm: "@ai-sdk/anthropic" },
+                capabilities: {
+                  temperature: true,
+                  reasoning: false,
+                  attachment: false,
+                  toolcall: false,
+                  input: { text: true, audio: false, image: false, video: false, pdf: false },
+                  output: { text: true, audio: false, image: false, video: false, pdf: false },
+                  interleaved: false,
+                },
+                cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                limit: { context: 128000, output: 8000 },
+                options: {},
+                headers: {}
+              }
+              log.info("injected dynamic anthropic model", { modelID })
+            }
+          }
         }
       }
     }

@@ -276,3 +276,47 @@ export ANTHROPIC_API_KEY="your_api_key"                             # 或 OPENCO
 
 nuwaxcode run "Hello GLM"
 ```
+
+## Token 限制配置 (max_tokens)
+
+对于 `openai-compatible` 和 `anthropic-compatible` 等自定义模型，您可以通过配置文件覆盖默认的 Token 输出限制。默认情况下，系统使用 4096 作为输出后的最大 token 数限制，您可以通过 `options.max_tokens` 来修改此值。
+
+### 示例配置
+
+修改 `~/.config/opencode/opencode.json`：
+
+```json
+{
+  "provider": {
+    "openai-compatible": {
+      "options": {
+        "max_tokens": 16000
+      }
+    },
+    "anthropic-compatible": {
+      "options": {
+        "max_tokens": 8000
+      }
+    }
+  }
+}
+```
+
+配置后，相应 Provider 的所有模型输出上限将更新为您指定的值。
+
+### 使用环境变量配置 (推荐用于 Docker/CI)
+
+您也可以通过环境变量来设置全局或特定 Provider 的 max_tokens，优先级低于 `opencode.json` 配置。
+
+| 环境变量                      | 说明                                        |
+| :---------------------------- | :------------------------------------------ |
+| `OPENCODE_MAX_TOKENS`         | 全局最大 Token 限制 (所有自定义 Provider)   |
+
+**示例：**
+
+```bash
+export OPENCODE_MAX_TOKENS=12000
+nuwaxcode run "hello"
+```
+
+
