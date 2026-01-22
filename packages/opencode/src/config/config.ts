@@ -42,7 +42,8 @@ export namespace Config {
     // Log environment variables for debugging
     const envVars = Object.keys(process.env).reduce(
       (acc, key) => {
-        const isSensitive = /(_KEY|_SECRET|_TOKEN|_PASSWORD|_CREDENTIAL)/i.test(key)
+        const isSensitive =
+          /(_KEY|_SECRET|_TOKEN|_PASSWORD|_CREDENTIAL)/i.test(key) && key !== "OPENCODE_MAX_TOKENS"
         acc[key] = isSensitive ? "******" : process.env[key]
         return acc
       },
