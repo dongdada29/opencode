@@ -52,9 +52,13 @@ export namespace Log {
     return logpath
   }
   let write = (msg: any) => {
-    process.stderr.write(msg)
+    if (!suppress) {
+      process.stderr.write(msg)
+    }
     return msg.length
   }
+
+  let suppress = false
 
   export function raw(msg: string) {
     write(msg + "\n")
@@ -62,13 +66,17 @@ export namespace Log {
 
   export async function init(options: Options) {
     if (options.level) level = options.level
-    const dir = options.dir ?? process.env.OPENCODE_LOG_DIR
+
+    // Set suppress flag based on print option, regardless of whether dir is set
+    suppress = !options.print
+
+    // Use the specified directory, env var, or fall back to default log directory
+    const dir = options.dir ?? process.env.OPENCODE_LOG_DIR ?? (suppress ? Global.Path.log : undefined)
     if (!dir) return
 
     await fs.mkdir(dir, { recursive: true })
 
     // cleanup(dir) // logic might need adjustment if users manage this dir, but for rotation we can keep it or adjust pattern
-    if (options.print) return
 
     const date = new Date()
     const yyyy = date.getFullYear()
@@ -102,7 +110,7 @@ export namespace Log {
     }
   }
 
-  export let flush = async () => { }
+  export let flush = async () => {}
 
   async function cleanup(dir: string) {
     const glob = new Bun.Glob("nuwaxcode_*.log")
@@ -115,7 +123,7 @@ export namespace Log {
     if (files.length <= 5) return
 
     const filesToDelete = files.sort().slice(0, -10)
-    await Promise.all(filesToDelete.map((file) => fs.unlink(file).catch(() => { })))
+    await Promise.all(filesToDelete.map((file) => fs.unlink(file).catch(() => {})))
   }
 
   function formatError(error: Error, depth = 0): string {
@@ -150,10 +158,19 @@ export namespace Log {
           return prefix + value
         })
         .join(" ")
+
+      let safeMessage = message
+      if (message && typeof message === "object" && !(message instanceof Error)) {
+        safeMessage = JSON.stringify(message)
+      } else if (typeof message === "string") {
+        // Prevent carriage returns from messing up the terminal log line
+        safeMessage = message.replace(/\r/g, "\\r")
+      }
+
       const next = new Date()
       const diff = next.getTime() - last
       last = next.getTime()
-      return [next.toISOString().split(".")[0], "+" + diff + "ms", prefix, message].filter(Boolean).join(" ") + "\n"
+      return [next.toISOString().split(".")[0], "+" + diff + "ms", prefix, safeMessage].filter(Boolean).join(" ") + "\n"
     }
     const result: Logger = {
       debug(message?: any, extra?: Record<string, any>) {
