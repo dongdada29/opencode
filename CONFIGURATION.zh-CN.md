@@ -172,7 +172,7 @@ export OPENCODE_LOG_DIR="./logs"
 nuwaxcode run "hello"
 ```
 
-日志文件将按日期生成，例如 `nuwaxcode_2026_01_20.log`。
+日志文件将按日期和时间生成，例如 `nuwaxcode_2026_01_22_132601_1gq4r9.log`。其命名规则为：`nuwaxcode_YYYY_MM_DD_HHmmss_随机后缀.log`。
 
 ### 核心日志事件一览表
 
@@ -180,27 +180,24 @@ nuwaxcode run "hello"
 
 | 分类 | 事件名称 (`Event`) | 含义与关键信息 |
 | :--- | :--- | :--- |
-| **System** | `system.env` | 系统启动时的完整环境变量快照。<br>敏感信息（如 API Key, Token 等）已自动脱敏为 `******`。 |
-| **Config** | `config.load` | 最终加载的完整配置对象 (已过滤敏感信息)。<br>包含了从文件、默认值合并后的所有设置。 |
-| **ACP** | `acp.initialize` | ACP 协议初始化握手。<br>记录 `clientCapabilities`, `clientInfo` 等客户端信息。 |
+| **System** | `system.env` | 系统启动时的完整环境变量快照（用于诊断环境差异）。<br>敏感信息（如 API Key, Token 等）已自动脱敏为 `******`。 |
+| **Config** | `config.load` | 最终加载的完整配置对象 (已脱敏)。<br>包含了从文件、环境变量及默认值合并后的所有设置（如模型、键位映射等）。 |
+| **ACP** | `acp.initialize` | ACP 协议初始化握手。<br>记录 `clientCapabilities`, `clientInfo` (客户端名称及版本，如 Zed)。 |
 | | `acp.shutdown.success/error` | ACP 服务正常关闭或异常退出。<br>标志着连接周期的结束。 |
-| | `acp.message.part` | **双向**消息/内容更新。<br>包含**用户输入**与**模型生成**的实时增量及工具状态。 |
+| | `acp.message.part` | **双向**消息/内容更新。<br>包含用户输入 (`text`)、模型生成 (`delta`)、快照信息 (`snapshot`) 及工具状态。 |
 | | `acp.permission.result` | 权限请求结果。<br>记录 `permissionID`, `outcome` (allow/reject)。 |
 | | `acp.tool.update` | 工具调用状态更新。<br>记录 `toolCallId`, `status` (pending/in_progress/completed/error)。 |
-| **Session** | `session.create` | 发起会话创建请求。<br>记录 `sessionId`, `cwd`, `mcpServers` (MCP 服务数量)。 |
-| | `session.create.result` | 会话创建成功。<br>记录最终的 Session State 对象。 |
+| **Session** | `session.create` / `.result` | 会话创建请求与结果。<br>记录 `sessionId`, `cwd`, 以及初始化的 `model` 配置。 |
 | | `session.load` / `.result` | 会话加载请求与结果。<br>用于恢复旧会话。 |
-| | `session.context` | 会话上下文详情。<br>包含完整的 `systemPrompt`, `model` 配置, `cwd` 等。 |
-| **LLM** | `llm.prompt` | 发送给 LLM 的完整提示词。<br>字段：`content` (完整文本)。 |
-| | `llm.config` | 当前 LLM 请求的配置参数。<br>字段：`provider`, `model`, `temperature`, `options`。 |
-| **MCP** | `mcp.tool.execute` | MCP 工具执行详情。<br>字段：`tool` (名称), `args` (参数), `duration` (耗时), `status` (started/completed)。 |
-| | `mcp.stderr` | 本地 MCP 服务的标准错误输出 (stderr)。<br>用于捕获工具内部崩溃或调试信息。 |
-| **Skill** | `skill.load` | 技能加载事件。<br>字段：`name` (技能名), `location` (定义文件路径)。 |
-| | `skill.execute` | 技能执行事件。<br>字段：`name`, `dir` (运行目录)。 |
-| **Performance** | `provider.state` | 核心 Provider 状态初始化。<br>关键耗时点，包含所有 Provider 的发现与合并。 |
-| | `provider.getSDK` | 动态加载特定 Provider SDK。<br>可能涉及 `bun install` 耗时。 |
-| | `plugin.load` | 插件加载耗时。<br>包含插件安装与导入过程。 |
-| | `bun.install` | 依赖安装耗时。<br>底层依赖包的下载与安装。 |
+| | `session.context` | 会话上下文详情。<br>包含 `systemPrompt`, `model`, `mcpServers` 等完整上下文快照。 |
+| **LLM** | `llm.prompt` | 发送给 LLM 的完整提示词消息数组。<br>包含 System Prompt、对话历史及工具调用结果。 |
+| | `llm.config` | 当前 LLM 请求的配置参数。<br>记录 `provider`, `model`, `temperature` 以及其他 API 特定参数。 |
+| **MCP** | `mcp.tool.execute` / `mcp.stderr` | MCP 工具执行。记录工具名称、参数、耗时以及標準错误输出。<br>`mcp.stderr` 对调试自定义 MCP Server 极其关键。 |
+| **Skill** | `skill.load` / `skill.execute` | 技能（Skill）的加载与执行事件。<br>记录技能路径、名称以及执行时的参数。 |
+| **Performance** | `provider.state` | 核心 Provider 状态初始化耗时。 |
+| | `provider.getSDK` | 动态加载 Provider SDK 耗时。 |
+| | `plugin.load` | 插件（Plugin）加载耗时（包含 `bun install` 和导入过程）。 |
+| | `bun.run` / `bun.install` | 内部执行 Bun 命令或安装依赖的详细信息及耗时。 |
 
 ### 日志内容示例
 
