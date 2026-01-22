@@ -13,7 +13,8 @@ const { binaries } = await import("./build.ts")
 const otpArg = process.argv.find(arg => arg.startsWith("--otp="))
 let otp = otpArg ? otpArg.split("=")[1] : null
 
-if (!otp) {
+const noOtp = process.argv.includes("--no-otp")
+if (!otp && !noOtp) {
   const response = await text({
     message: "Enter NPM OTP (required for 2FA, leave empty to skip):",
     placeholder: "123456",
@@ -69,13 +70,32 @@ const tasks = Object.entries(binaries).map(async ([name]) => {
     await $`chmod -R 755 .`.cwd(`./dist/${name}`)
   }
   await $`bun pm pack`.cwd(`./dist/${name}`)
-  for (const tag of tags) {
-    await $`npm publish *.tgz --access public --tag ${tag} ${otpFlags}`.cwd(`./dist/${name}`)
+
+  const primaryTag = tags[0]
+  try {
+    await $`npm publish *.tgz --access public --tag ${primaryTag} ${otpFlags}`.cwd(`./dist/${name}`)
+  } catch (e) {
+    console.log(`Publish failed for ${name} (might check if version exists), continuing to tags...`)
+  }
+
+  for (const tag of tags.slice(1)) {
+    await $`npm dist-tag add ${name}@${pkg.version} ${tag} ${otpFlags}`
   }
 })
 await Promise.all(tasks)
-for (const tag of tags) {
-  await $`cd ./dist/${pkg.name} && bun pm pack && npm publish *.tgz --access public --tag ${tag} ${otpFlags}`
+
+{
+  await $`cd ./dist/${pkg.name} && bun pm pack`
+  const primaryTag = tags[0]
+  try {
+    await $`npm publish *.tgz --access public --tag ${primaryTag} ${otpFlags}`.cwd(`./dist/${pkg.name}`)
+  } catch (e) {
+    console.log(`Publish failed for ${pkg.name} (might check if version exists), continuing to tags...`)
+  }
+
+  for (const tag of tags.slice(1)) {
+    await $`npm dist-tag add ${pkg.name}@${pkg.version} ${tag} ${otpFlags}`
+  }
 }
 
 if (!Script.preview) {
