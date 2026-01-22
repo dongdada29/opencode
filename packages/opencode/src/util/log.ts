@@ -74,9 +74,12 @@ export namespace Log {
     const yyyy = date.getFullYear()
     const MM = String(date.getMonth() + 1).padStart(2, "0")
     const DD = String(date.getDate()).padStart(2, "0")
+    const HH = String(date.getHours()).padStart(2, "0")
+    const mm = String(date.getMinutes()).padStart(2, "0")
+    const ss = String(date.getSeconds()).padStart(2, "0")
     // Generate a random 6-character suffix to ensure unique log files per session
     const suffix = Math.random().toString(36).substring(2, 8)
-    const filename = `nuwaxcode_${yyyy}_${MM}_${DD}_${suffix}.log`
+    const filename = `nuwaxcode_${yyyy}_${MM}_${DD}_${HH}${mm}${ss}_${suffix}.log`
 
     logpath = path.join(dir, filename)
 
@@ -99,10 +102,10 @@ export namespace Log {
     }
   }
 
-  export let flush = async () => {}
+  export let flush = async () => { }
 
   async function cleanup(dir: string) {
-    const glob = new Bun.Glob("????-??-??T??????.log")
+    const glob = new Bun.Glob("nuwaxcode_*.log")
     const files = await Array.fromAsync(
       glob.scan({
         cwd: dir,
@@ -111,8 +114,8 @@ export namespace Log {
     )
     if (files.length <= 5) return
 
-    const filesToDelete = files.slice(0, -10)
-    await Promise.all(filesToDelete.map((file) => fs.unlink(file).catch(() => {})))
+    const filesToDelete = files.sort().slice(0, -10)
+    await Promise.all(filesToDelete.map((file) => fs.unlink(file).catch(() => { })))
   }
 
   function formatError(error: Error, depth = 0): string {
