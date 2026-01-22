@@ -23,6 +23,7 @@ import { BusEvent } from "../bus/bus-event"
 import { Bus } from "@/bus"
 import { TuiEvent } from "@/cli/cmd/tui/event"
 import open from "open"
+import { Writable } from "node:stream"
 
 export namespace MCP {
   const log = Log.create({ service: "mcp" })
@@ -417,6 +418,12 @@ export namespace MCP {
       const [cmd, ...args] = mcp.command
       const cwd = Instance.directory
       const transport = new StdioClientTransport({
+        stderr: new Writable({
+          write(chunk, encoding, callback) {
+            log.info("mcp.stderr", { key, chunk: chunk.toString() })
+            callback()
+          },
+        }),
         command: cmd,
         args,
         cwd,
