@@ -3,4 +3,4 @@
 - ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
 - The default branch in this repo is `dev`.
 - To publish a new version, update `CHANGELOG-nuwaxcode.md` and `packages/opencode/package.json`, then run `cd packages/opencode && bun run publish`.
-- After publishing, set the new version as latest: `npm dist-tag add nuwaxcode@<version> latest`.
+- To publish as `latest` (default), run: `cd packages/opencode && bun run publish --latest`.

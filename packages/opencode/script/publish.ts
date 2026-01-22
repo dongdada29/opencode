@@ -58,7 +58,11 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
   ),
 )
 
+const isLatest = process.argv.includes("--latest")
 const tags = [Script.channel]
+if (isLatest) {
+  tags.push("latest")
+}
 
 const tasks = Object.entries(binaries).map(async ([name]) => {
   if (process.platform !== "win32") {
