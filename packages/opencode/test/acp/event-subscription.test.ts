@@ -186,7 +186,7 @@ function createFakeAgent() {
 
   const stop = () => {
     controller.close()
-    ;(agent as any).eventAbort.abort()
+      ; (agent as any).eventAbort.abort()
   }
 
   return { agent, controller, calls, updates, chunks, stop, sdk, connection }
@@ -428,6 +428,85 @@ describe("acp.agent event subscription", () => {
 
         // Now session A's permission should be replied
         expect(permissionReplies).toContain("perm_a")
+
+        stop()
+      },
+    })
+  })
+
+  test("question.asked events are auto-rejected in ACP mode", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, stop, connection } = createFakeAgent()
+
+        // In ACP mode, questions are now auto-rejected since ACP clients
+        // typically don't support interactive questions.
+
+        const { Bus } = await import("../../src/bus")
+        const { Question } = await import("../../src/question")
+
+        // Listen for rejected events (not replied)
+        const rejectedPromise = new Promise<{ requestID: string; sessionID: string }>((resolve) => {
+          const sub = Bus.subscribe(Question.Event.Rejected, (payload) => {
+            resolve(payload.properties)
+            sub()
+          })
+        })
+
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionA = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        // Verify requestPermission is NOT called for questions (since we auto-reject)
+        let requestPermissionCalled = false
+        const originalRequestPermission = connection.requestPermission
+        connection.requestPermission = async (params) => {
+          if (params.toolCall.kind === ("question" as any)) {
+            requestPermissionCalled = true
+          }
+          return originalRequestPermission(params)
+        }
+
+        // Wait for the asked event on the Bus
+        const askedEventPromise = new Promise<any>((resolve) => {
+          const sub = Bus.subscribe(Question.Event.Asked, (payload) => {
+            resolve(payload.properties)
+            sub()
+          })
+        })
+
+        // Question.ask will reject with RejectedError since we auto-reject
+        const realAskPromise = Question.ask({
+          sessionID: sessionA,
+          questions: [{
+            question: "Do you like code?",
+            header: "Poll",
+            options: [{ label: "Yes", description: "I love it" }, { label: "No", description: "I hate it" }]
+          }]
+        }).catch((e) => e) // Catch the rejection
+
+        const askedEvent = await askedEventPromise
+
+        // Now feed this into our Agent's mocked event stream
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "question.asked",
+            properties: askedEvent
+          }
+        } as any)
+
+        // Wait for the rejection
+        const rejected = await rejectedPromise
+
+        expect(rejected.requestID).toBe(askedEvent.id)
+        expect(rejected.sessionID).toBe(sessionA)
+        expect(requestPermissionCalled).toBe(false) // Should NOT call requestPermission
+
+        // Verify the ask promise was rejected
+        const result = await realAskPromise
+        expect(result).toBeInstanceOf(Question.RejectedError)
 
         stop()
       },

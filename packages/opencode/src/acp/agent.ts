@@ -27,6 +27,7 @@ import { Installation } from "@/installation"
 import { MessageV2 } from "@/session/message-v2"
 import { Config } from "@/config/config"
 import { Todo } from "@/session/todo"
+import { Question } from "@/question"
 import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
 import type { Event, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
@@ -174,6 +175,20 @@ export namespace ACP {
               }
             })
           this.permissionQueues.set(permission.sessionID, next)
+          return
+        }
+
+        case "question.asked": {
+          log.info("acp.question.asked", { event: event.properties })
+          const request = event.properties as Question.Request
+          const session = this.sessionManager.tryGet(request.sessionID)
+          if (!session) return
+
+          // Auto-reject questions in ACP mode since ACP clients typically don't support
+          // interactive questions. This prevents blocking when the client doesn't respond
+          // to question permission requests.
+          log.info("acp.question.auto-reject", { requestID: request.id, sessionID: request.sessionID })
+          await Question.reject(request.id)
           return
         }
 
