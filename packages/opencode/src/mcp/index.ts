@@ -292,9 +292,65 @@ export namespace MCP {
     s.clients[name] = result.mcpClient
     s.status[name] = result.status
 
+    // Invalidate cache since clients changed
+    invalidateToolsCache()
+
     return {
       status: s.status,
     }
+  }
+
+  /**
+   * Batch add multiple MCP servers in parallel for improved performance.
+   * This avoids multiple HTTP round-trips when adding many servers.
+   */
+  export async function addBatch(servers: Record<string, Config.Mcp>) {
+    const s = await state()
+    const entries = Object.entries(servers)
+    
+    log.info("addBatch starting", { count: entries.length, servers: Object.keys(servers) })
+    const startTime = Date.now()
+    
+    // Create all MCP clients in parallel
+    const results = await Promise.all(
+      entries.map(async ([name, mcp]) => {
+        const result = await create(name, mcp).catch((error) => {
+          log.error("addBatch: failed to create MCP client", { name, error })
+          return undefined
+        })
+        return { name, result }
+      })
+    )
+    
+    // Update state with results
+    for (const { name, result } of results) {
+      if (!result) {
+        s.status[name] = { status: "failed" as const, error: "unknown error" }
+        continue
+      }
+      
+      s.status[name] = result.status
+      
+      if (result.mcpClient) {
+        // Close existing client if present
+        const existingClient = s.clients[name]
+        if (existingClient) {
+          await existingClient.close().catch((error) => {
+            log.error("addBatch: failed to close existing client", { name, error })
+          })
+        }
+        s.clients[name] = result.mcpClient
+      s.clients[name] = result.mcpClient
+      }
+    }
+    
+    // Invalidate cache after batch update
+    invalidateToolsCache()
+    
+    const elapsed = Date.now() - startTime
+    log.info("addBatch completed", { count: entries.length, elapsedMs: elapsed })
+    
+    return s.status
   }
 
   async function create(key: string, mcp: Config.Mcp) {
@@ -569,9 +625,45 @@ export namespace MCP {
       delete s.clients[name]
     }
     s.status[name] = { status: "disabled" }
+    
+    // Invalidate cache on disconnect
+    invalidateToolsCache()
+  }
+
+  // Tools cache to avoid repeated fetching
+  let toolsCache: { result: Record<string, Tool>; timestamp: number } | undefined
+
+  // Clear cache when tools might have changed
+  function invalidateToolsCache() {
+    if (toolsCache) {
+      log.info("invalidating tools cache")
+      toolsCache = undefined
+    }
+  }
+
+  // Subscribe to tools changed events
+  let subscribed = false
+  function ensureSubscribed() {
+    if (subscribed) return
+    try {
+      Bus.subscribe(ToolsChanged, () => {
+        invalidateToolsCache()
+      })
+      subscribed = true
+    } catch (e) {
+      log.warn("failed to subscribe to tools changed event", { error: e })
+    }
   }
 
   export async function tools() {
+    // Ensure we are subscribed to changes when we start using tools
+    ensureSubscribed()
+
+    // Return cached result if valid (ttl 5 seconds to allow polling but prevent tight loop spam)
+    if (toolsCache && Date.now() - toolsCache.timestamp < 5000) {
+      return toolsCache.result
+    }
+
     const result: Record<string, Tool> = {}
     const s = await state()
     const cfg = await Config.get()
@@ -607,7 +699,15 @@ export namespace MCP {
         result[sanitizedClientName + "_" + sanitizedToolName] = await convertMcpTool(mcpTool, client, clientName, timeout)
       }
     }
+    
     log.info("MCP.tools() returning aggregated tools", { count: Object.keys(result).length, tools: Object.keys(result) })
+    
+    // Update cache
+    toolsCache = {
+      result,
+      timestamp: Date.now(),
+    }
+    
     return result
   }
 

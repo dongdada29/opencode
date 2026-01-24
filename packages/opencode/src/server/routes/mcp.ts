@@ -61,6 +61,36 @@ export const McpRoutes = lazy(() =>
       },
     )
     .post(
+      "/batch",
+      describeRoute({
+        summary: "Add multiple MCP servers in batch",
+        description: "Batch add multiple Model Context Protocol (MCP) servers in parallel for improved performance.",
+        operationId: "mcp.addBatch",
+        responses: {
+          200: {
+            description: "MCP servers added successfully",
+            content: {
+              "application/json": {
+                schema: resolver(z.record(z.string(), MCP.Status)),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          servers: z.record(z.string(), Config.Mcp),
+        }),
+      ),
+      async (c) => {
+        const { servers } = c.req.valid("json")
+        const results = await MCP.addBatch(servers)
+        return c.json(results)
+      },
+    )
+    .post(
       "/:name/auth",
       describeRoute({
         summary: "Start MCP OAuth",

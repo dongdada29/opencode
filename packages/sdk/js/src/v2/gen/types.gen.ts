@@ -4103,6 +4103,39 @@ export type McpAddResponses = {
 
 export type McpAddResponse = McpAddResponses[keyof McpAddResponses]
 
+export type McpAddBatchData = {
+  body?: {
+    servers: {
+      [key: string]: McpLocalConfig | McpRemoteConfig
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+  }
+  url: "/mcp/batch"
+}
+
+export type McpAddBatchErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type McpAddBatchError = McpAddBatchErrors[keyof McpAddBatchErrors]
+
+export type McpAddBatchResponses = {
+  /**
+   * MCP servers added successfully
+   */
+  200: {
+    [key: string]: McpStatus
+  }
+}
+
+export type McpAddBatchResponse = McpAddBatchResponses[keyof McpAddBatchResponses]
+
 export type McpAuthRemoveData = {
   body?: never
   path: {

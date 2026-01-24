@@ -928,22 +928,20 @@ export namespace ACP {
         }
       }
 
-      await Promise.all(
-        Object.entries(mcpServers).map(async ([key, mcp]) => {
-          await this.sdk.mcp
-            .add(
-              {
-                directory,
-                name: key,
-                config: mcp,
-              },
-              { throwOnError: true },
-            )
-            .catch((error) => {
-              log.error("failed to add mcp server", { name: key, error })
-            })
-        }),
-      )
+      // Use batch API for parallel MCP server registration (performance optimization)
+      if (Object.keys(mcpServers).length > 0) {
+        await this.sdk.mcp
+          .addBatch(
+            {
+              directory,
+              servers: mcpServers,
+            },
+            { throwOnError: false },
+          )
+          .catch((error) => {
+            log.error("failed to add mcp servers in batch", { error, count: Object.keys(mcpServers).length })
+          })
+      }
 
       setTimeout(() => {
         this.connection.sessionUpdate({
