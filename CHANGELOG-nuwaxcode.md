@@ -16,7 +16,7 @@
 ### 🔄 优化
 
 - **MCP**: 实现 **MCP Batch API**。在 ACP 会话初始化时，通过一个批处理调用同时连接多个 MCP 服务器，将 HTTP 往返开销由 O(N) 降低至 O(1)。
-- **Throughput**: 极大提升了在高并发环境下的连接复用速度（热启动耗时缩短至 **30s** 左右）。
+- **Throughput**: 极大提升了在高并发环境下的连接复用速度（典型热启动耗时缩短至 **30s** 左右，相比之前提升 ~200%）。
 
 ---
 
@@ -25,6 +25,7 @@
 ### 🔄 优化
 
 - **MCP**: 实现 **MCP Tools 缓存** (5s TTL)。避免在单次 prompt 处理中重复调用昂贵的 `listTools()` RPC。
+- **MCP**: 实现 **MCP 连接池 (Connection Pooling)**。支持根据配置哈希复用已存在的 MCP 客户端，避免重复启动子进程。
 - **Initialization**: 并行化 `loadSessionMode` 中的配置加载逻辑（providers/agents/commands 并行获取）。
 
 ---
