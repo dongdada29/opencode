@@ -255,7 +255,7 @@
     },
     "packages/opencode": {
       "name": "nuwaxcode",
-      "version": "1.1.61",
+      "version": "1.1.62",
       "bin": {
         "nuwaxcode": "./bin/nuwaxcode",
       },
@@ -354,13 +354,13 @@
         "zod-to-json-schema": "3.24.5",
       },
       "optionalDependencies": {
-        "nuwaxcode-darwin-arm64": "1.1.61",
-        "nuwaxcode-darwin-x64": "1.1.61",
-        "nuwaxcode-linux-arm64": "1.1.61",
-        "nuwaxcode-linux-arm64-musl": "1.1.61",
-        "nuwaxcode-linux-x64": "1.1.61",
-        "nuwaxcode-linux-x64-musl": "1.1.61",
-        "nuwaxcode-windows-x64": "1.1.61",
+        "nuwaxcode-darwin-arm64": "1.1.62",
+        "nuwaxcode-darwin-x64": "1.1.62",
+        "nuwaxcode-linux-arm64": "1.1.62",
+        "nuwaxcode-linux-arm64-musl": "1.1.62",
+        "nuwaxcode-linux-x64": "1.1.62",
+        "nuwaxcode-linux-x64-musl": "1.1.62",
+        "nuwaxcode-windows-x64": "1.1.62",
       },
     },
     "packages/plugin": {
@@ -3150,20 +3150,6 @@
     "nth-check": ["nth-check@2.1.1", "", { "dependencies": { "boolbase": "^1.0.0" } }, "sha512-lqjrjmaOoAnWfMmBPL+XNnynZh2+swxiX3WUE0s4yEHI6m+AwrK2UZOimIRl3X/4QctVqS8AiZjFqyOGrMXb/w=="],
 
     "nuwaxcode": ["nuwaxcode@workspace:packages/opencode"],
-
-    "nuwaxcode-darwin-arm64": ["nuwaxcode-darwin-arm64@1.1.61", "", { "os": "darwin", "cpu": "arm64" }, "sha512-U70+kFnAmqBjS2cAc7NePbOn3hpvAfoU2BQ/Gd5HtS5sAJZL4fkmt7Bgn7nC4MMM1c9VayCaXRs/RkpnNZybMw=="],
-
-    "nuwaxcode-darwin-x64": ["nuwaxcode-darwin-x64@1.1.61", "", { "os": "darwin", "cpu": "x64" }, "sha512-ApEvU8lIG2Wp6JWXTsBw12ywAqGiqvnIEB44kB+3Hr6oRjJB3BUo25BvTlx4Ji2nlv+2cUa9MX7C72WcsDDoOA=="],
-
-    "nuwaxcode-linux-arm64": ["nuwaxcode-linux-arm64@1.1.61", "", { "os": "linux", "cpu": "arm64" }, "sha512-0TECyGFfC+q5g0mig7y6CREYgqGNE5GAHa48VQFNdqQsiDRWFe/KjtJ0tga8OD56iv9vhR5H7dVvPGVggbOBKQ=="],
-
-    "nuwaxcode-linux-arm64-musl": ["nuwaxcode-linux-arm64-musl@1.1.61", "", { "os": "linux", "cpu": "arm64" }, "sha512-I18tjlUjjmEXRklY9qxuyeMwCqj/6mdQybe5Fq9xiQydO3RGmJvIUMcDKURldq7ZjGWUKx53EaR+BFrGeS6LIA=="],
-
-    "nuwaxcode-linux-x64": ["nuwaxcode-linux-x64@1.1.61", "", { "os": "linux", "cpu": "x64" }, "sha512-U9hX+lciE81ZyfYA1Jb1DXll7/extizV6B+K85oLroaRVC9OhAM3I47tzLOPxAGhWKNxtGwE93rQw4uYG9sRWw=="],
-
-    "nuwaxcode-linux-x64-musl": ["nuwaxcode-linux-x64-musl@1.1.61", "", { "os": "linux", "cpu": "x64" }, "sha512-6VNAwKxX6tvQ0SdLD8YabHT/A+P3BHnoN4VBEEdLBx+bAuWB8EAVLxnB5oI0dV39Smcy5v6797muLKlXZ96euw=="],
-
-    "nuwaxcode-windows-x64": ["nuwaxcode-windows-x64@1.1.61", "", { "os": "win32", "cpu": "x64" }, "sha512-QOnun3qApHoaIYOjKXsyH652CL/b8Xdyr/vXV541nsOnnXBtAzWS+em7tOeSYfieNIqGagiq+2B0O4hfQAc33A=="],
 
     "nypm": ["nypm@0.6.4", "", { "dependencies": { "citty": "^0.2.0", "pathe": "^2.0.3", "tinyexec": "^1.0.2" }, "bin": { "nypm": "dist/cli.mjs" } }, "sha512-1TvCKjZyyklN+JJj2TS3P4uSQEInrM/HkkuSXsEzm1ApPgBffOn8gFguNnZf07r/1X6vlryfIqMUkJKQMzlZiw=="],
 
