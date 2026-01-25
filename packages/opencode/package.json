@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.1.58",
+  "version": "1.1.59",
   "name": "nuwaxcode",
   "type": "module",
   "license": "MIT",
@@ -121,12 +121,12 @@
     "zod-to-json-schema": "3.24.5"
   },
   "optionalDependencies": {
-    "nuwaxcode-darwin-arm64": "1.1.58",
-    "nuwaxcode-darwin-x64": "1.1.58",
-    "nuwaxcode-linux-arm64": "1.1.58",
-    "nuwaxcode-linux-arm64-musl": "1.1.58",
-    "nuwaxcode-linux-x64": "1.1.58",
-    "nuwaxcode-linux-x64-musl": "1.1.58",
-    "nuwaxcode-windows-x64": "1.1.58"
+    "nuwaxcode-darwin-arm64": "1.1.59",
+    "nuwaxcode-darwin-x64": "1.1.59",
+    "nuwaxcode-linux-arm64": "1.1.59",
+    "nuwaxcode-linux-arm64-musl": "1.1.59",
+    "nuwaxcode-linux-x64": "1.1.59",
+    "nuwaxcode-linux-x64-musl": "1.1.59",
+    "nuwaxcode-windows-x64": "1.1.59"
   }
 }
