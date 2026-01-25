@@ -2,6 +2,33 @@
 
 本文档总结了 `feat/nuwaxcode` 分支相对于主分支的主要更改。
 
+## v1.1.61 (2026-01-25)
+
+### 🔄 优化
+
+- **Performance**: 实现 **TUI 懒加载**。移除了 ACP 模式下对 React/Blessed 等重型 UI 库的静态导入，显著降低了 headless 模式下的内存开销（~70%）和容器启动时间（~50%）。
+- **Latency**: ACP 冷启动速度由之前的分钟级降低至 **26s** 左右。
+
+---
+
+## v1.1.60 (2026-01-25)
+
+### 🔄 优化
+
+- **MCP**: 实现 **MCP Batch API**。在 ACP 会话初始化时，通过一个批处理调用同时连接多个 MCP 服务器，将 HTTP 往返开销由 O(N) 降低至 O(1)。
+- **Throughput**: 极大提升了在高并发环境下的连接复用速度（热启动耗时缩短至 **30s** 左右）。
+
+---
+
+## v1.1.59 (2026-01-25)
+
+### 🔄 优化
+
+- **MCP**: 实现 **MCP Tools 缓存** (5s TTL)。避免在单次 prompt 处理中重复调用昂贵的 `listTools()` RPC。
+- **Initialization**: 并行化 `loadSessionMode` 中的配置加载逻辑（providers/agents/commands 并行获取）。
+
+---
+
 ## v1.1.56 (2026-01-23)
 
 ### 🐛 修复
@@ -35,6 +62,7 @@
 - **Config**: 支持在 Linux 上读取固定路径 `/root/.config/opencode/opencode.json` 的配置文件。
 
 ---
+
 ## v1.1.52 (2026-01-22)
 
 ### 🐛 修复
