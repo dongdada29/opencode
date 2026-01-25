@@ -1,5 +1,5 @@
 import { cmd } from "@/cli/cmd/cmd"
-import { tui } from "./app"
+
 import { Rpc } from "@/util/rpc"
 import { type rpc } from "./worker"
 import path from "path"
@@ -140,6 +140,7 @@ export const TuiThreadCommand = cmd({
       events = createEventSource(client)
     }
 
+    const { tui } = await import("./app")
     const tuiPromise = tui({
       url,
       fetch: customFetch,
