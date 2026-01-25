@@ -594,7 +594,17 @@ export namespace MCP {
     s.status[name] = { status: "disabled" }
   }
 
+  // Tools cache to avoid repeated listTools() calls
+  let toolsCache: { tools: Record<string, Tool>; expiry: number } | null = null
+  const TOOLS_CACHE_TTL = 5000 // 5 seconds
+
   export async function tools() {
+    // Return cached tools if still valid
+    if (toolsCache && Date.now() < toolsCache.expiry) {
+      log.info("MCP.tools() returning cached tools", { count: Object.keys(toolsCache.tools).length })
+      return toolsCache.tools
+    }
+
     const result: Record<string, Tool> = {}
     const s = await state()
     const cfg = await Config.get()
@@ -630,7 +640,10 @@ export namespace MCP {
         result[sanitizedClientName + "_" + sanitizedToolName] = await convertMcpTool(mcpTool, client, clientName, timeout)
       }
     }
-    log.info("MCP.tools() returning aggregated tools", { count: Object.keys(result).length, tools: Object.keys(result) })
+    
+    // Cache the result
+    toolsCache = { tools: result, expiry: Date.now() + TOOLS_CACHE_TTL }
+    log.info("MCP.tools() returning aggregated tools (cached)", { count: Object.keys(result).length, tools: Object.keys(result) })
     return result
   }
 

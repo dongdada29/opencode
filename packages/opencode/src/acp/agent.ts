@@ -846,8 +846,14 @@ export namespace ACP {
       const model = await defaultModel(this.config, directory)
       const sessionId = params.sessionId
 
-      const providers = await this.sdk.config.providers({ directory }).then((x) => x.data!.providers)
-      const entries = providers.sort((a, b) => {
+      // Parallelize API calls for better performance
+      const [providersData, agents, commands] = await Promise.all([
+        this.sdk.config.providers({ directory }).then((x) => x.data!.providers),
+        this.config.sdk.app.agents({ directory }, { throwOnError: true }).then((resp) => resp.data!),
+        this.config.sdk.command.list({ directory }, { throwOnError: true }).then((resp) => resp.data!),
+      ])
+
+      const entries = providersData.sort((a, b) => {
         const nameA = a.name.toLowerCase()
         const nameB = b.name.toLowerCase()
         if (nameA < nameB) return -1
@@ -861,24 +867,6 @@ export namespace ACP {
           name: `${provider.name}/${model.name}`,
         }))
       })
-
-      const agents = await this.config.sdk.app
-        .agents(
-          {
-            directory,
-          },
-          { throwOnError: true },
-        )
-        .then((resp) => resp.data!)
-
-      const commands = await this.config.sdk.command
-        .list(
-          {
-            directory,
-          },
-          { throwOnError: true },
-        )
-        .then((resp) => resp.data!)
 
       const availableCommands = commands.map((command) => ({
         name: command.name,
