@@ -255,7 +255,7 @@
     },
     "packages/opencode": {
       "name": "nuwaxcode",
-      "version": "1.1.59",
+      "version": "1.1.60",
       "bin": {
         "nuwaxcode": "./bin/nuwaxcode",
       },
@@ -354,13 +354,13 @@
         "zod-to-json-schema": "3.24.5",
       },
       "optionalDependencies": {
-        "nuwaxcode-darwin-arm64": "1.1.59",
-        "nuwaxcode-darwin-x64": "1.1.59",
-        "nuwaxcode-linux-arm64": "1.1.59",
-        "nuwaxcode-linux-arm64-musl": "1.1.59",
-        "nuwaxcode-linux-x64": "1.1.59",
-        "nuwaxcode-linux-x64-musl": "1.1.59",
-        "nuwaxcode-windows-x64": "1.1.59",
+        "nuwaxcode-darwin-arm64": "1.1.60",
+        "nuwaxcode-darwin-x64": "1.1.60",
+        "nuwaxcode-linux-arm64": "1.1.60",
+        "nuwaxcode-linux-arm64-musl": "1.1.60",
+        "nuwaxcode-linux-x64": "1.1.60",
+        "nuwaxcode-linux-x64-musl": "1.1.60",
+        "nuwaxcode-windows-x64": "1.1.60",
       },
     },
     "packages/plugin": {
