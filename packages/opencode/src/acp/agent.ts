@@ -32,6 +32,7 @@ import { z } from "zod"
 import { LoadAPIKeyError } from "ai"
 import type { Event, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
+import { MCP } from "../mcp"
 
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
@@ -916,22 +917,9 @@ export namespace ACP {
         }
       }
 
-      await Promise.all(
-        Object.entries(mcpServers).map(async ([key, mcp]) => {
-          await this.sdk.mcp
-            .add(
-              {
-                directory,
-                name: key,
-                config: mcp,
-              },
-              { throwOnError: true },
-            )
-            .catch((error) => {
-              log.error("failed to add mcp server", { name: key, error })
-            })
-        }),
-      )
+      await MCP.addBatch(mcpServers).catch((error) => {
+        log.error("failed to add batch mcp servers", { error })
+      })
 
       setTimeout(() => {
         this.connection.sessionUpdate({

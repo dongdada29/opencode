@@ -320,6 +320,81 @@ export namespace MCP {
     }
   }
 
+  export async function addBatch(servers: Record<string, Config.Mcp>) {
+    const s = await state()
+    const results: Record<string, MCP.Status> = {}
+
+    // First pass: identify which servers need to be added/updated
+    const toAdd: Record<string, Config.Mcp> = {}
+    
+    for (const [name, mcp] of Object.entries(servers)) {
+      // Connection reuse logic
+      const configHash = JSON.stringify({
+        type: mcp.type,
+        command: mcp.type === "local" ? mcp.command : undefined,
+        environment: mcp.type === "local" ? mcp.environment : undefined,
+        url: mcp.type === "remote" ? mcp.url : undefined,
+        headers: mcp.type === "remote" ? mcp.headers : undefined,
+      })
+
+      const existingClient = s.clients[name]
+      if (existingClient && s.status[name]?.status === "connected") {
+        const existingHash = s.configHashes[name]
+        if (existingHash === configHash) {
+          log.info("reusing existing MCP connection (config unchanged)", { name })
+          results[name] = s.status[name]!
+          continue
+        }
+        log.info("MCP config changed, will reconnect", { name })
+      }
+      toAdd[name] = mcp
+    }
+
+    // Second pass: add new/updated servers in parallel
+    await Promise.all(
+      Object.entries(toAdd).map(async ([name, mcp]) => {
+        const result = await create(name, mcp)
+        if (!result) {
+          const status = {
+            status: "failed" as const,
+            error: "unknown error",
+          }
+          s.status[name] = status
+          results[name] = status
+          return
+        }
+        if (!result.mcpClient) {
+          s.status[name] = result.status
+          results[name] = result.status
+          return
+        }
+        
+        // Close existing client if present
+        const oldClient = s.clients[name]
+        if (oldClient) {
+          await oldClient.close().catch((error) => {
+            log.error("Failed to close existing MCP client", { name, error })
+          })
+        }
+
+        s.clients[name] = result.mcpClient
+        s.status[name] = result.status
+        // Compute and store hash for the newly added client
+        s.configHashes[name] = JSON.stringify({
+          type: mcp.type,
+          command: mcp.type === "local" ? mcp.command : undefined,
+          environment: mcp.type === "local" ? mcp.environment : undefined,
+          url: mcp.type === "remote" ? mcp.url : undefined,
+          headers: mcp.type === "remote" ? mcp.headers : undefined,
+        })
+        results[name] = result.status
+        log.info("MCP client added (batch)", { name })
+      })
+    )
+
+    return { status: results }
+  }
+
   async function create(key: string, mcp: Config.Mcp) {
     if (mcp.enabled === false) {
       log.info("mcp server disabled", { key })
