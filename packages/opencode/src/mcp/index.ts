@@ -202,6 +202,7 @@ export namespace MCP {
       return {
         status,
         clients,
+        configHashes: {} as Record<string, string>,  // Track config for connection reuse
       }
     },
     async (state) => {
@@ -265,6 +266,27 @@ export namespace MCP {
 
   export async function add(name: string, mcp: Config.Mcp) {
     const s = await state()
+    
+    // Connection reuse: compute config hash for comparison
+    const configHash = JSON.stringify({
+      type: mcp.type,
+      command: mcp.type === "local" ? mcp.command : undefined,
+      environment: mcp.type === "local" ? mcp.environment : undefined,
+      url: mcp.type === "remote" ? mcp.url : undefined,
+      headers: mcp.type === "remote" ? mcp.headers : undefined,
+    })
+    
+    // Check if an identical MCP is already connected - skip respawn
+    const existingClient = s.clients[name]
+    if (existingClient && s.status[name]?.status === "connected") {
+      const existingHash = s.configHashes[name]
+      if (existingHash === configHash) {
+        log.info("reusing existing MCP connection (config unchanged)", { name })
+        return { status: s.status }
+      }
+      log.info("MCP config changed, will reconnect", { name })
+    }
+    
     const result = await create(name, mcp)
     if (!result) {
       const status = {
@@ -283,14 +305,15 @@ export namespace MCP {
       }
     }
     // Close existing client if present to prevent memory leaks
-    const existingClient = s.clients[name]
-    if (existingClient) {
-      await existingClient.close().catch((error) => {
+    const oldClient = s.clients[name]
+    if (oldClient) {
+      await oldClient.close().catch((error) => {
         log.error("Failed to close existing MCP client", { name, error })
       })
     }
     s.clients[name] = result.mcpClient
     s.status[name] = result.status
+    s.configHashes[name] = configHash  // Store config hash for future reuse checks
 
     return {
       status: s.status,
