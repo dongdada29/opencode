@@ -1208,12 +1208,9 @@ export namespace ACP {
         return []
       })
 
-    if (specified && providers.length) {
-      const provider = providers.find((p) => p.id === specified.providerID)
-      if (provider && provider.models[specified.modelID]) return specified
-    }
-
-    if (specified && !providers.length) return specified
+    // If user specified a model, use it directly without validation
+    // Custom models may not be in the provider's model list but are still valid
+    if (specified) return specified
 
     const opencodeProvider = providers.find((p) => p.id === "opencode")
     if (opencodeProvider) {
@@ -1237,8 +1234,6 @@ export namespace ACP {
         modelID: best.id,
       }
     }
-
-    if (specified) return specified
 
     return { providerID: "opencode", modelID: "big-pickle" }
   }

@@ -1079,7 +1079,7 @@ export namespace Provider {
               const envModel = Env.get("OPENCODE_MODEL")
               // Pre-populate model from env if it belongs to openai-compatible
               if (envModel && envModel.startsWith("openai-compatible/")) {
-                const modelID = envModel.split("/")[1]
+                const modelID = envModel.slice(envModel.indexOf("/") + 1)
                 if (modelID) {
                   models[modelID] = {
                     id: modelID,
@@ -1144,7 +1144,7 @@ export namespace Provider {
               const models: Record<string, Model> = {}
               const envModel = Env.get("OPENCODE_MODEL")
               if (envModel && envModel.startsWith("anthropic/")) {
-                const modelID = envModel.split("/")[1]
+                const modelID = envModel.slice(envModel.indexOf("/") + 1)
                 if (modelID) {
                   models[modelID] = {
                     id: modelID,
@@ -1197,7 +1197,7 @@ export namespace Provider {
               const models: Record<string, Model> = {}
               const envModel = Env.get("OPENCODE_MODEL")
               if (envModel && envModel.startsWith("anthropic-compatible/")) {
-                const modelID = envModel.split("/")[1]
+                const modelID = envModel.slice(envModel.indexOf("/") + 1)
                 if (modelID) {
                   models[modelID] = {
                     id: modelID,
@@ -1255,7 +1255,7 @@ export namespace Provider {
         // Dynamic model injection for existing providers (specifically anthropic)
         const envModel = Env.get("OPENCODE_MODEL")
         if (envModel && envModel.startsWith(providerID + "/")) {
-          const modelID = envModel.split("/")[1]
+          const modelID = envModel.slice(envModel.indexOf("/") + 1)
           if (modelID && providers[providerID] && !providers[providerID].models[modelID]) {
             if (providerID === "anthropic") {
               providers[providerID].models[modelID] = {
