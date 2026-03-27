@@ -99,12 +99,6 @@ export namespace Config {
       log.debug("loaded custom config from OPENCODE_CONFIG_CONTENT")
     }
 
-    // OPENCODE_MODEL env var overrides model
-    if (process.env.OPENCODE_MODEL) {
-      result.model = process.env.OPENCODE_MODEL
-      log.debug("loaded model overrides from OPENCODE_MODEL env var", { model: result.model })
-    }
-
     result.agent = result.agent || {}
     result.mode = result.mode || {}
     result.plugin = result.plugin || []
@@ -152,6 +146,12 @@ export namespace Config {
       result.agent = mergeDeep(result.agent, await loadAgent(dir))
       result.agent = mergeDeep(result.agent, await loadMode(dir))
       result.plugin.push(...(await loadPlugin(dir)))
+    }
+
+    // OPENCODE_MODEL env var overrides model (highest priority)
+    if (process.env.OPENCODE_MODEL) {
+      result.model = process.env.OPENCODE_MODEL
+      log.debug("loaded model overrides from OPENCODE_MODEL env var", { model: result.model })
     }
 
     // Migrate deprecated mode field to agent field
