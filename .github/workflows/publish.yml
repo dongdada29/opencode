@@ -6,6 +6,7 @@ on:
     branches:
       - dev
       - snapshot-*
+      - feat/nuwaxcode-nuwaclaw-builtin
   workflow_dispatch:
     inputs:
       bump:
