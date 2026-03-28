@@ -6,19 +6,23 @@ import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Server } from "../server/server"
 import { BunProc } from "../bun"
 import { Instance } from "../project/instance"
-import { Flag } from "../flag/flag"
 import { CodexAuthPlugin } from "./codex"
-import { Session } from "../session"
-import { NamedError } from "@opencode-ai/util/error"
 import { CopilotAuthPlugin } from "./copilot"
+import { AnthropicAuthPlugin } from "./anthropic"
+import { GitLabAuthPlugin } from "./gitlab"
 
 export namespace Plugin {
   const log = Log.create({ service: "plugin" })
 
-  const BUILTIN = ["opencode-anthropic-auth@0.0.9", "@gitlab/opencode-gitlab-auth@1.3.0"]
-
   // Built-in plugins that are directly imported (not installed from npm)
-  const INTERNAL_PLUGINS: PluginInstance[] = [CodexAuthPlugin, CopilotAuthPlugin]
+  // Note: AnthropicAuthPlugin and GitLabAuthPlugin were moved from BUILTIN (npm install)
+  // to INTERNAL_PLUGINS to improve startup performance by avoiding bun add during init
+  const INTERNAL_PLUGINS: PluginInstance[] = [
+    CodexAuthPlugin,
+    CopilotAuthPlugin,
+    AnthropicAuthPlugin,
+    GitLabAuthPlugin,
+  ]
 
   const state = Instance.state(async () => {
     const client = createOpencodeClient({
@@ -44,36 +48,22 @@ export namespace Plugin {
     }
 
     const plugins = [...(config.plugin ?? [])]
-    if (!Flag.OPENCODE_DISABLE_DEFAULT_PLUGINS) {
-      plugins.push(...BUILTIN)
-    }
 
     for (let plugin of plugins) {
-      // ignore old codex plugin since it is supported first party now
-      if (plugin.includes("opencode-openai-codex-auth") || plugin.includes("opencode-copilot-auth")) continue
+      // ignore old codex/copilot/anthropic/gitlab plugins since they are now first-party
+      if (
+        plugin.includes("opencode-openai-codex-auth") ||
+        plugin.includes("opencode-copilot-auth") ||
+        plugin.includes("opencode-anthropic-auth") ||
+        plugin.includes("opencode-gitlab-auth")
+      )
+        continue
       using _ = log.time("plugin.load", { path: plugin })
       if (!plugin.startsWith("file://")) {
         const lastAtIndex = plugin.lastIndexOf("@")
         const pkg = lastAtIndex > 0 ? plugin.substring(0, lastAtIndex) : plugin
         const version = lastAtIndex > 0 ? plugin.substring(lastAtIndex + 1) : "latest"
-        const builtin = BUILTIN.some((x) => x.startsWith(pkg + "@"))
-        plugin = await BunProc.install(pkg, version).catch((err) => {
-          if (!builtin) throw err
-
-          const message = err instanceof Error ? err.message : String(err)
-          log.error("failed to install builtin plugin", {
-            pkg,
-            version,
-            error: message,
-          })
-          Bus.publish(Session.Event.Error, {
-            error: new NamedError.Unknown({
-              message: `Failed to install built-in plugin ${pkg}@${version}: ${message}`,
-            }).toObject(),
-          })
-
-          return ""
-        })
+        plugin = await BunProc.install(pkg, version)
         if (!plugin) continue
       }
       const mod = await import(plugin)
