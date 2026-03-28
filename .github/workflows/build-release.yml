@@ -40,12 +40,15 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
-      - name: Install dependencies (root)
-        run: bun install
-
-      - name: Install dependencies (opencode)
-        working-directory: packages/opencode
-        run: bun install
+      - name: Install dependencies
+        run: |
+          bun install
+          # Ensure @opentui/solid is linked in packages/opencode/node_modules
+          # for the build script's relative import (../node_modules/@opentui/solid/...)
+          mkdir -p packages/opencode/node_modules/@opentui
+          if [ ! -e packages/opencode/node_modules/@opentui/solid ]; then
+            ln -s "$(pwd)/node_modules/@opentui/solid" packages/opencode/node_modules/@opentui/solid
+          fi
 
       - name: Read version
         id: version
