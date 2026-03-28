@@ -126,7 +126,12 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          echo "version=${{ inputs.version || '1.1.65' }}" >> $GITHUB_OUTPUT
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            VERSION=$(grep '"version"' packages/opencode/package.json | head -1 | sed 's/.*: *"//;s/".*//')
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+          fi
 
       - name: Create/update GitHub Release
         env:
@@ -142,7 +147,7 @@ jobs:
             gh release create "$TAG" --title "$TAG" --draft --notes "nuwaxcode $TAG"
           fi
 
-          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" \) | while read -f file; do
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" \) | while read file; do
             echo "Uploading: $file"
             gh release upload "$TAG" "$file" --clobber
           done
