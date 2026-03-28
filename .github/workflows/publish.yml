@@ -32,7 +32,7 @@ permissions:
 jobs:
   publish:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    if: github.repository == 'anomalyco/opencode'
+    if: github.repository == 'nuwax-ai/nuwaxcode'
     steps:
       - uses: actions/checkout@v3
         with:
