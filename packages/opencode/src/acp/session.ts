@@ -122,4 +122,18 @@ export class ACPSessionManager {
     this.sessions.set(sessionId, session)
     return session
   }
+
+  setMcpInitPromise(sessionId: string, promise: Promise<void>) {
+    const session = this.sessions.get(sessionId)
+    if (session) session.mcpInitPromise = promise
+  }
+
+  getMcpInitPromise(sessionId: string): Promise<void> | undefined {
+    return this.sessions.get(sessionId)?.mcpInitPromise
+  }
+
+  clearMcpInitPromise(sessionId: string) {
+    const session = this.sessions.get(sessionId)
+    if (session) delete session.mcpInitPromise
+  }
 }

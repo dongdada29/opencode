@@ -13,6 +13,8 @@ export interface ACPSessionState {
   modeId?: string
   /** System prompt passed via ACP _meta.systemPrompt */
   systemPrompt?: string | { append: string }
+  /** MCP 懒加载 promise，newSession 时 fire-and-forget，首次 prompt 时 await */
+  mcpInitPromise?: Promise<void>
 }
 
 export interface ACPConfig {

@@ -917,9 +917,11 @@ export namespace ACP {
         }
       }
 
-      await MCP.addBatch(mcpServers).catch((error) => {
-        log.error("failed to add batch mcp servers", { error })
-      })
+      // fire-and-forget：MCP 在后台初始化，首次 prompt 时按需等待
+      const mcpInitPromise = MCP.addBatch(mcpServers)
+        .then(() => { log.info("mcp.addBatch.completed", { sessionId }) })
+        .catch((error) => { log.error("failed to add batch mcp servers", { error }) })
+      this.sessionManager.setMcpInitPromise(sessionId, mcpInitPromise)
 
       setTimeout(() => {
         this.connection.sessionUpdate({
@@ -975,6 +977,13 @@ export namespace ACP {
       const sessionID = params.sessionId
       const session = this.sessionManager.get(sessionID)
       const directory = session.cwd
+
+      // 等待 MCP 懒加载完成（如果有）
+      const mcpInit = this.sessionManager.getMcpInitPromise(sessionID)
+      if (mcpInit) {
+        await mcpInit
+        this.sessionManager.clearMcpInitPromise(sessionID)
+      }
 
       const current = session.model
       const model = current ?? (await defaultModel(this.config, directory))
