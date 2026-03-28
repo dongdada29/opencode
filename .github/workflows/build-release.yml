@@ -40,7 +40,11 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
-      - name: Install dependencies
+      - name: Install dependencies (root)
+        run: bun install
+
+      - name: Install dependencies (opencode)
+        working-directory: packages/opencode
         run: bun install
 
       - name: Read version
