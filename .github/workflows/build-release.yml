@@ -24,7 +24,7 @@ jobs:
         include:
           - host: macos-latest
             platform: darwin-arm64
-          - host: macos-13
+          - host: macos-13-large
             platform: darwin-x64
           - host: ubuntu-24.04
             platform: linux-x64
@@ -41,6 +41,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
 
       - name: Install dependencies
+        shell: bash
         run: |
           bun install
           # The build script uses hardcoded relative paths to ../node_modules/@opentui/*
