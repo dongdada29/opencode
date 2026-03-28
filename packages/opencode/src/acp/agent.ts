@@ -1177,6 +1177,10 @@ export namespace ACP {
     }
   }
 
+  // Model cache to avoid repeated API calls for model resolution
+  const modelCache = new Map<string, { model: { providerID: string; modelID: string }; expires: number }>()
+  const MODEL_CACHE_TTL = 60_000
+
   async function defaultModel(config: ACPConfig, cwd?: string) {
     const sdk = config.sdk
     const configured = config.defaultModel
@@ -1184,58 +1188,72 @@ export namespace ACP {
 
     const directory = cwd ?? process.cwd()
 
-    const specified = await sdk.config
-      .get({ directory }, { throwOnError: true })
-      .then((resp) => {
-        const cfg = resp.data
-        if (!cfg || !cfg.model) return undefined
-        const parsed = Provider.parseModel(cfg.model)
-        return {
-          providerID: parsed.providerID,
-          modelID: parsed.modelID,
-        }
-      })
-      .catch((error) => {
-        log.error("failed to load user config for default model", { error })
-        return undefined
-      })
+    // Check cache first
+    const cached = modelCache.get(directory)
+    if (cached && Date.now() < cached.expires) {
+      log.debug("defaultModel.cache.hit", { directory })
+      return cached.model
+    }
 
-    const providers = await sdk.config
-      .providers({ directory }, { throwOnError: true })
-      .then((x) => x.data?.providers ?? [])
-      .catch((error) => {
-        log.error("failed to list providers for default model", { error })
-        return []
-      })
+    // Parallel fetch: config.get + providers
+    const [specified, providers] = await Promise.all([
+      sdk.config
+        .get({ directory }, { throwOnError: true })
+        .then((resp) => {
+          const cfg = resp.data
+          if (!cfg || !cfg.model) return undefined
+          const parsed = Provider.parseModel(cfg.model)
+          return {
+            providerID: parsed.providerID,
+            modelID: parsed.modelID,
+          }
+        })
+        .catch((error) => {
+          log.error("failed to load user config for default model", { error })
+          return undefined
+        }),
+      sdk.config
+        .providers({ directory }, { throwOnError: true })
+        .then((x) => x.data?.providers ?? [])
+        .catch((error) => {
+          log.error("failed to list providers for default model", { error })
+          return []
+        }),
+    ])
 
     // If user specified a model, use it directly without validation
-    // Custom models may not be in the provider's model list but are still valid
-    if (specified) return specified
+    if (specified) {
+      modelCache.set(directory, { model: specified, expires: Date.now() + MODEL_CACHE_TTL })
+      return specified
+    }
 
+    let result: { providerID: string; modelID: string }
     const opencodeProvider = providers.find((p) => p.id === "opencode")
     if (opencodeProvider) {
       if (opencodeProvider.models["big-pickle"]) {
-        return { providerID: "opencode", modelID: "big-pickle" }
-      }
-      const [best] = Provider.sort(Object.values(opencodeProvider.models))
-      if (best) {
-        return {
-          providerID: best.providerID,
-          modelID: best.id,
+        result = { providerID: "opencode", modelID: "big-pickle" }
+      } else {
+        const [best] = Provider.sort(Object.values(opencodeProvider.models))
+        if (best) {
+          result = { providerID: best.providerID, modelID: best.id }
+        } else {
+          const models = providers.flatMap((p) => Object.values(p.models))
+          const [best] = Provider.sort(models)
+          result = best
+            ? { providerID: best.providerID, modelID: best.id }
+            : { providerID: "opencode", modelID: "big-pickle" }
         }
       }
+    } else {
+      const models = providers.flatMap((p) => Object.values(p.models))
+      const [best] = Provider.sort(models)
+      result = best
+        ? { providerID: best.providerID, modelID: best.id }
+        : { providerID: "opencode", modelID: "big-pickle" }
     }
 
-    const models = providers.flatMap((p) => Object.values(p.models))
-    const [best] = Provider.sort(models)
-    if (best) {
-      return {
-        providerID: best.providerID,
-        modelID: best.id,
-      }
-    }
-
-    return { providerID: "opencode", modelID: "big-pickle" }
+    modelCache.set(directory, { model: result, expires: Date.now() + MODEL_CACHE_TTL })
+    return result
   }
 
   function parseUri(

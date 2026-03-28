@@ -229,16 +229,26 @@ export namespace Config {
     const hasGitIgnore = await Bun.file(gitignore).exists()
     if (!hasGitIgnore) await Bun.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
 
-    await BunProc.run(
-      ["add", "@opencode-ai/plugin@" + (Installation.isLocal() ? "latest" : "^1.1.4")],
-      {
-        cwd: dir,
-      },
-    ).catch(() => { })
+    // Skip bun add if @opencode-ai/plugin is already installed
+    const pluginPkgDir = path.join(dir, "node_modules", "@opencode-ai", "plugin")
+    const pluginAlreadyInstalled = existsSync(path.join(pluginPkgDir, "package.json"))
+    if (!pluginAlreadyInstalled) {
+      await BunProc.run(
+        ["add", "@opencode-ai/plugin@" + (Installation.isLocal() ? "latest" : "^1.1.4")],
+        { cwd: dir },
+      ).catch(() => { })
+    } else {
+      log.debug("skipping @opencode-ai/plugin install (already installed)", { dir })
+    }
 
     // Install any additional dependencies defined in the package.json
     // This allows local plugins and custom tools to use external packages
-    await BunProc.run(["install"], { cwd: dir }).catch(() => { })
+    const hasPackageJson = existsSync(pkg)
+    const packageContent = hasPackageJson ? await Bun.file(pkg).json().catch(() => ({})) : {}
+    const hasExtraDeps = Object.keys(packageContent.dependencies ?? {}).length > 0 || Object.keys(packageContent.devDependencies ?? {}).length > 0
+    if (hasExtraDeps) {
+      await BunProc.run(["install"], { cwd: dir }).catch(() => { })
+    }
   }
 
   function rel(item: string, patterns: string[]) {
