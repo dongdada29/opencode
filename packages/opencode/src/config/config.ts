@@ -229,16 +229,21 @@ export namespace Config {
     const hasGitIgnore = await Bun.file(gitignore).exists()
     if (!hasGitIgnore) await Bun.write(gitignore, ["node_modules", "package.json", "bun.lock", ".gitignore"].join("\n"))
 
-    // Skip bun add if @opencode-ai/plugin is already installed
+    // Skip bun add if @opencode-ai/plugin is already installed or bundled in binary
     const pluginPkgDir = path.join(dir, "node_modules", "@opencode-ai", "plugin")
     const pluginAlreadyInstalled = existsSync(path.join(pluginPkgDir, "package.json"))
-    if (!pluginAlreadyInstalled) {
+    let pluginBundled = false
+    try {
+      require.resolve("@opencode-ai/plugin")
+      pluginBundled = true
+    } catch {}
+    if (!pluginAlreadyInstalled && !pluginBundled) {
       await BunProc.run(
         ["add", "@opencode-ai/plugin@" + (Installation.isLocal() ? "latest" : "^1.1.4")],
         { cwd: dir },
       ).catch(() => { })
     } else {
-      log.debug("skipping @opencode-ai/plugin install (already installed)", { dir })
+      log.debug("skipping @opencode-ai/plugin install", { dir, reason: pluginAlreadyInstalled ? "already installed" : "bundled in binary" })
     }
 
     // Install any additional dependencies defined in the package.json
