@@ -114,6 +114,7 @@ jobs:
 
   release:
     needs: build
+    if: always() && needs.build.result != 'failed'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
