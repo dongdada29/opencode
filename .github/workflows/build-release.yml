@@ -18,31 +18,7 @@ permissions:
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - host: macos-latest
-            platform: darwin-arm64
-            build-args: --single
-            cross-compile: false
-          - host: macos-latest
-            platform: darwin-x64
-            build-args: ""
-            cross-compile: true
-          - host: ubuntu-24.04
-            platform: linux-x64
-            build-args: --single
-            cross-compile: false
-          - host: ubuntu-24.04-arm
-            platform: linux-arm64
-            build-args: --single
-            cross-compile: false
-          - host: windows-latest
-            platform: windows-x64
-            build-args: --single
-            cross-compile: false
-    runs-on: ${{ matrix.host }}
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -50,8 +26,10 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
+      - name: Install zip utility
+        run: sudo apt-get update && sudo apt-get install -y zip
+
       - name: Install dependencies
-        shell: bash
         run: |
           bun install
           mkdir -p packages/opencode/node_modules/@opentui
@@ -64,7 +42,6 @@ jobs:
 
       - name: Read version
         id: version
-        shell: bash
         run: |
           if [ -n "${{ inputs.version }}" ]; then
             echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
@@ -73,58 +50,34 @@ jobs:
             echo "version=${TAG#v}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Build
+      - name: Build all targets
         working-directory: packages/opencode
-        run: bun run script/build.ts -- ${{ matrix.build-args }}
+        run: bun run script/build.ts
         env:
           OPENCODE_VERSION: ${{ steps.version.outputs.version }}
 
-      # 交叉编译时跳过 smoke test（产出的二进制无法在当前 host 执行）
-      - name: Smoke test
-        if: runner.os != 'Windows' && matrix.cross-compile == false
-        shell: bash
+      - name: List dist directories
+        run: ls -la packages/opencode/dist/
+
+      - name: Create archives
         run: |
           cd packages/opencode
-          BINARY=$(find dist -name "nuwaxcode" -o -name "nuwaxcode.exe" | head -1)
-          echo "Binary: $BINARY"
-          chmod +x "$BINARY" 2>/dev/null || true
-          "$BINARY" --version
+          for dir in dist/*/; do
+            name=$(basename "$dir")
+            echo "--- Archiving $name ---"
+            tar czf "${{ github.workspace }}/${name}.tar.gz" -C "${dir}bin" .
+            if [[ "$name" == *windows* ]]; then
+              (cd "${dir}bin" && zip -r "${{ github.workspace }}/${name}.zip" .)
+            fi
+          done
 
-      - name: Create archive (tar.gz, non-Windows)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          cd packages/opencode
-          # 交叉编译时按 platform 过滤 dist 目录
-          if [ "${{ matrix.cross-compile }}" = "true" ]; then
-            DIST_DIR=$(find dist -mindepth 1 -maxdepth 1 -type d -name "*${{ matrix.platform }}*" | head -1)
-          else
-            DIST_DIR=$(find dist -mindepth 1 -maxdepth 1 -type d | head -1)
-          fi
-          if [ -z "$DIST_DIR" ]; then
-            echo "ERROR: No dist directory found for platform ${{ matrix.platform }}"
-            ls -la dist/
-            exit 1
-          fi
-          NAME=$(basename "$DIST_DIR")
-          cd "$DIST_DIR/bin"
-          tar czf "${{ github.workspace }}/${NAME}.tar.gz" .
-          echo "Created $NAME.tar.gz ($(ls -lh ${{ github.workspace }}/$NAME.tar.gz | awk '{print $5}'))"
+      - name: List archives
+        run: ls -lh ${{ github.workspace }}/*.tar.gz ${{ github.workspace }}/*.zip
 
-      - name: Create archive (zip, Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          Set-Location packages/opencode
-          $distDir = Get-ChildItem -Path dist -Directory | Select-Object -First 1
-          $name = $distDir.Name
-          Compress-Archive -Path "$($distDir.FullName)/bin/*" -DestinationPath "${{ github.workspace }}/$name.zip"
-          Write-Host "Created $name.zip"
-
-      - name: Upload artifact
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.platform }}
+          name: all-platforms
           retention-days: 1
           path: |
             ${{ github.workspace }}/*.tar.gz
@@ -136,8 +89,6 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: actions/download-artifact@v4
         with:
