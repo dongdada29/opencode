@@ -2,6 +2,15 @@
 
 本文档总结了 `feat/nuwaxcode` 分支相对于主分支的主要更改。
 
+## v1.1.66 (2026-03-30)
+
+### 🔄 优化
+
+- **MCP 懒加载**: ACP `newSession` 不再同步等待 MCP 服务器连接建立，改为 fire-and-forget 后台初始化，首次 `prompt` 时按需等待。`acp.session.create` 耗时从 ~2890ms 降至 ~10ms，与 claude-code 一致。
+- **CI 标准化**: 新增 tag 触发的 `build-release.yml` 工作流，单 runner 通过 Bun 跨平台编译构建全部 11 个目标（darwin/linux/windows 含 baseline、musl 变体），自动创建 GitHub Release 并上传全部 13 个平台资产。
+
+---
+
 ## v1.1.62 (2026-01-25)
 
 ### 🐛 修复
