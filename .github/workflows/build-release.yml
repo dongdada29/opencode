@@ -24,7 +24,7 @@ jobs:
         include:
           - host: macos-latest
             platform: darwin-arm64
-          - host: macos-13-large
+          - host: macos-13
             platform: darwin-x64
           - host: ubuntu-24.04
             platform: linux-x64
