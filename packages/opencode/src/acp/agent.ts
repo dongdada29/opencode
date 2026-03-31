@@ -37,6 +37,19 @@ import { MCP } from "../mcp"
 export namespace ACP {
   const log = Log.create({ service: "acp-agent" })
 
+  interface ACPTraceContext {
+    requestId: string
+    sessionId?: string
+    cwd?: string
+    model?: string
+    agent?: string
+  }
+
+  interface PromptTraceState extends ACPTraceContext {
+    startedAt: number
+    firstTokenLogged: boolean
+  }
+
   export async function init({ sdk: _sdk }: { sdk: OpencodeClient }) {
     return {
       create: (connection: AgentSideConnection, fullConfig: ACPConfig) => {
@@ -53,6 +66,7 @@ export namespace ACP {
     private eventAbort = new AbortController()
     private eventStarted = false
     private permissionQueues = new Map<string, Promise<void>>()
+    private promptTrace = new Map<string, PromptTraceState>()
     private permissionOptions: PermissionOption[] = [
       { optionId: "once", kind: "allow_once", name: "Allow once" },
       { optionId: "always", kind: "allow_always", name: "Always allow" },
@@ -65,6 +79,36 @@ export namespace ACP {
       this.sdk = config.sdk
       this.sessionManager = new ACPSessionManager(this.sdk)
       this.startEventSubscription()
+    }
+
+    private resolveRequestId(meta: unknown): string {
+      return extractRequestId(meta) ?? `acp-${crypto.randomUUID()}`
+    }
+
+    private markPromptStart(context: ACPTraceContext) {
+      if (!context.sessionId) return
+      this.promptTrace.set(context.sessionId, {
+        ...context,
+        startedAt: Date.now(),
+        firstTokenLogged: false,
+      })
+    }
+
+    private markPromptFirstToken(sessionId: string, kind: "text" | "reasoning" | "tool") {
+      const trace = this.promptTrace.get(sessionId)
+      if (!trace || trace.firstTokenLogged) return
+      trace.firstTokenLogged = true
+      const firstTokenMs = Math.max(0, Date.now() - trace.startedAt)
+      this.promptTrace.set(sessionId, trace)
+      log.info("acp.prompt.first-token", {
+        requestId: trace.requestId,
+        sessionId: trace.sessionId,
+        cwd: trace.cwd,
+        model: trace.model,
+        agent: trace.agent,
+        kind,
+        firstTokenMs,
+      })
     }
 
     private startEventSubscription() {
@@ -180,7 +224,7 @@ export namespace ACP {
         }
 
         case "question.asked": {
-          log.info("acp.question.asked", { event: event.properties })
+          log.debug("acp.question.asked", { event: event.properties })
           const request = event.properties as Question.Request
           const session = this.sessionManager.tryGet(request.sessionID)
           if (!session) return
@@ -188,13 +232,13 @@ export namespace ACP {
           // Auto-reject questions in ACP mode since ACP clients typically don't support
           // interactive questions. This prevents blocking when the client doesn't respond
           // to question permission requests.
-          log.info("acp.question.auto-reject", { requestID: request.id, sessionID: request.sessionID })
+          log.debug("acp.question.auto-reject", { requestID: request.id, sessionID: request.sessionID })
           await Question.reject(request.id)
           return
         }
 
         case "message.part.updated": {
-          log.info("acp.message.part", { event: event.properties })
+          log.debug("acp.message.part", { event: event.properties })
           const props = event.properties
           const part = props.part
           const session = this.sessionManager.tryGet(part.sessionID)
@@ -220,6 +264,7 @@ export namespace ACP {
           if (!message || message.info.role !== "assistant") return
 
           if (part.type === "tool") {
+            this.markPromptFirstToken(sessionId, "tool")
             switch (part.state.status) {
               case "pending":
                 await this.connection
@@ -236,7 +281,7 @@ export namespace ACP {
                     },
                   })
                   .then(() => {
-                    log.info("acp.tool.update", { status: "pending", toolCallId: part.callID, tool: part.tool })
+                    log.debug("acp.tool.update", { status: "pending", toolCallId: part.callID, tool: part.tool })
                   })
                   .catch((error) => {
                     log.error("failed to send tool pending to ACP", { error })
@@ -258,7 +303,7 @@ export namespace ACP {
                     },
                   })
                   .then(() => {
-                    log.info("acp.tool.update", { status: "in_progress", toolCallId: part.callID, tool: part.tool })
+                    log.debug("acp.tool.update", { status: "in_progress", toolCallId: part.callID, tool: part.tool })
                   })
                   .catch((error) => {
                     log.error("failed to send tool in_progress to ACP", { error })
@@ -345,7 +390,7 @@ export namespace ACP {
                     },
                   })
                   .then(() => {
-                    log.info("acp.tool.update", { status: "completed", toolCallId: part.callID, tool: toolName, title: toolTitle })
+                    log.debug("acp.tool.update", { status: "completed", toolCallId: part.callID, tool: toolName, title: toolTitle })
                   })
                   .catch((error) => {
                     log.error("failed to send tool completed to ACP", { error })
@@ -380,7 +425,7 @@ export namespace ACP {
                     },
                   })
                   .then(() => {
-                    log.info("acp.tool.update", { status: "error", toolCallId: part.callID, tool: toolName, error: errorText })
+                    log.debug("acp.tool.update", { status: "error", toolCallId: part.callID, tool: toolName, error: errorText })
                   })
                   .catch((error) => {
                     log.error("failed to send tool error to ACP", { error })
@@ -393,6 +438,7 @@ export namespace ACP {
           if (part.type === "text") {
             const delta = props.delta
             if (delta && part.ignored !== true) {
+              this.markPromptFirstToken(sessionId, "text")
               await this.connection
                 .sessionUpdate({
                   sessionId,
@@ -414,6 +460,7 @@ export namespace ACP {
           if (part.type === "reasoning") {
             const delta = props.delta
             if (delta) {
+              this.markPromptFirstToken(sessionId, "reasoning")
               await this.connection
                 .sessionUpdate({
                   sessionId,
@@ -482,22 +529,42 @@ export namespace ACP {
 
     async newSession(params: NewSessionRequest) {
       const directory = params.cwd
+      const requestId = this.resolveRequestId(params._meta)
+      const totalStart = Date.now()
       try {
+        const modelStart = Date.now()
         const model = await defaultModel(this.config, directory)
+        const defaultModelMs = Date.now() - modelStart
 
         // Extract systemPrompt from ACP meta (similar to claude-code-acp pattern)
         const systemPrompt = (params._meta as { systemPrompt?: string | { append: string } } | undefined)?.systemPrompt
 
         // Store ACP session state
+        const sessionCreateStart = Date.now()
         const state = await this.sessionManager.create(params.cwd, params.mcpServers, model, systemPrompt)
+        const sessionCreateMs = Date.now() - sessionCreateStart
         const sessionId = state.id
 
-        log.info("session.create", { sessionId, cwd: params.cwd, mcpServers: params.mcpServers, hasSystemPrompt: !!systemPrompt })
-
+        const loadSessionModeStart = Date.now()
         const load = await this.loadSessionMode({
           cwd: directory,
           mcpServers: params.mcpServers,
           sessionId,
+        }, { requestId })
+        const loadSessionModeMs = Date.now() - loadSessionModeStart
+
+        const modelText = `${model.providerID}/${model.modelID}`
+        log.info("acp.session.new", {
+          requestId,
+          sessionId,
+          cwd: params.cwd,
+          model: modelText,
+          hasSystemPrompt: !!systemPrompt,
+          mcpServerCount: params.mcpServers.length,
+          defaultModelMs,
+          sessionCreateMs,
+          loadSessionModeMs,
+          totalMs: Date.now() - totalStart,
         })
 
         return {
@@ -520,22 +587,29 @@ export namespace ACP {
     async loadSession(params: LoadSessionRequest) {
       const directory = params.cwd
       const sessionId = params.sessionId
+      const requestId = this.resolveRequestId(params._meta)
+      const totalStart = Date.now()
 
       try {
+        const modelStart = Date.now()
         const model = await defaultModel(this.config, directory)
+        const defaultModelMs = Date.now() - modelStart
 
         // Store ACP session state
+        const sessionLoadStart = Date.now()
         await this.sessionManager.load(sessionId, params.cwd, params.mcpServers, model)
+        const sessionLoadMs = Date.now() - sessionLoadStart
 
-        log.info("session.load", { sessionId, mcpServers: params.mcpServers.length })
-
+        const loadSessionModeStart = Date.now()
         const result = await this.loadSessionMode({
           cwd: directory,
           mcpServers: params.mcpServers,
           sessionId,
-        })
+        }, { requestId })
+        const loadSessionModeMs = Date.now() - loadSessionModeStart
 
         // Replay session history
+        const replayStart = Date.now()
         const messages = await this.sdk.session
           .messages(
             {
@@ -562,6 +636,21 @@ export namespace ACP {
           log.debug("replay message", msg)
           await this.processMessage(msg)
         }
+
+        const modelText = `${model.providerID}/${model.modelID}`
+        log.info("acp.session.load", {
+          requestId,
+          sessionId,
+          cwd: params.cwd,
+          model: modelText,
+          messageCount: messages?.length ?? 0,
+          mcpServerCount: params.mcpServers.length,
+          defaultModelMs,
+          sessionLoadMs,
+          loadSessionModeMs,
+          replayMs: Date.now() - replayStart,
+          totalMs: Date.now() - totalStart,
+        })
 
         return result
       } catch (e) {
@@ -842,7 +931,7 @@ export namespace ACP {
       }
     }
 
-    private async loadSessionMode(params: LoadSessionRequest) {
+    private async loadSessionMode(params: LoadSessionRequest, trace?: { requestId: string }) {
       const directory = params.cwd
       const model = await defaultModel(this.config, directory)
       const sessionId = params.sessionId
@@ -918,9 +1007,28 @@ export namespace ACP {
       }
 
       // fire-and-forget：MCP 在后台初始化，首次 prompt 时按需等待
+      const mcpAddBatchStart = Date.now()
+      log.info("acp.mcp.addBatch.start", {
+        requestId: trace?.requestId,
+        sessionId,
+        mcpServerCount: Object.keys(mcpServers).length,
+      })
       const mcpInitPromise = MCP.addBatch(mcpServers)
-        .then(() => { log.info("mcp.addBatch.completed", { sessionId }) })
-        .catch((error) => { log.error("failed to add batch mcp servers", { error }) })
+        .then(() => {
+          log.info("acp.mcp.addBatch.completed", {
+            requestId: trace?.requestId,
+            sessionId,
+            mcpServerCount: Object.keys(mcpServers).length,
+            durationMs: Date.now() - mcpAddBatchStart,
+          })
+        })
+        .catch((error) => {
+          log.error("failed to add batch mcp servers", {
+            error,
+            requestId: trace?.requestId,
+            sessionId,
+          })
+        })
       this.sessionManager.setMcpInitPromise(sessionId, mcpInitPromise)
 
       setTimeout(() => {
@@ -977,154 +1085,248 @@ export namespace ACP {
       const sessionID = params.sessionId
       const session = this.sessionManager.get(sessionID)
       const directory = session.cwd
+      const requestId = this.resolveRequestId(params._meta)
+      const promptStartedAt = Date.now()
+      this.markPromptStart({
+        requestId,
+        sessionId: sessionID,
+        cwd: directory,
+      })
 
-      // 等待 MCP 懒加载完成（如果有）
-      const mcpInit = this.sessionManager.getMcpInitPromise(sessionID)
-      if (mcpInit) {
-        await mcpInit
-        this.sessionManager.clearMcpInitPromise(sessionID)
-      }
+      log.info("acp.prompt.start", {
+        requestId,
+        sessionId: sessionID,
+        cwd: directory,
+      })
 
-      const current = session.model
-      const model = current ?? (await defaultModel(this.config, directory))
-      if (!current) {
-        this.sessionManager.setModel(session.id, model)
-      }
-      const agent = session.modeId ?? (await AgentModule.defaultAgent())
+      let waitMcpInitMs = 0
+      let partsParseMs = 0
+      let routeLookupMs = 0
+      let routeExecMs = 0
+      let route = "unknown"
+      let modelText: string | undefined
+      let agentText: string | undefined
 
-      const parts: Array<
-        { type: "text"; text: string } | { type: "file"; url: string; filename: string; mime: string }
-      > = []
-      for (const part of params.prompt) {
-        switch (part.type) {
-          case "text":
-            parts.push({
-              type: "text" as const,
-              text: part.text,
-            })
-            break
-          case "image": {
-            const parsed = parseUri(part.uri ?? "")
-            const filename = parsed.type === "file" ? parsed.filename : "image"
-            if (part.data) {
-              parts.push({
-                type: "file",
-                url: `data:${part.mimeType};base64,${part.data}`,
-                filename,
-                mime: part.mimeType,
-              })
-            } else if (part.uri && part.uri.startsWith("http:")) {
-              parts.push({
-                type: "file",
-                url: part.uri,
-                filename,
-                mime: part.mimeType,
-              })
-            }
-            break
-          }
-
-          case "resource_link":
-            const parsed = parseUri(part.uri)
-            // Use the name from resource_link if available
-            if (part.name && parsed.type === "file") {
-              parsed.filename = part.name
-            }
-            parts.push(parsed)
-
-            break
-
-          case "resource": {
-            const resource = part.resource
-            if ("text" in resource && resource.text) {
-              parts.push({
-                type: "text",
-                text: resource.text,
-              })
-            } else if ("blob" in resource && resource.blob && resource.mimeType) {
-              // Binary resource (PDFs, etc.): store as file part with data URL
-              const parsed = parseUri(resource.uri ?? "")
-              const filename = parsed.type === "file" ? parsed.filename : "file"
-              parts.push({
-                type: "file",
-                url: `data:${resource.mimeType};base64,${resource.blob}`,
-                filename,
-                mime: resource.mimeType,
-              })
-            }
-            break
-          }
-
-          default:
-            break
+      try {
+        // 等待 MCP 懒加载完成（如果有）
+        const mcpInit = this.sessionManager.getMcpInitPromise(sessionID)
+        if (mcpInit) {
+          const waitMcpInitStart = Date.now()
+          await mcpInit
+          waitMcpInitMs = Date.now() - waitMcpInitStart
+          this.sessionManager.clearMcpInitPromise(sessionID)
         }
-      }
 
-      log.info("parts", { parts })
+        const current = session.model
+        const model = current ?? (await defaultModel(this.config, directory))
+        if (!current) {
+          this.sessionManager.setModel(session.id, model)
+        }
+        const agent = session.modeId ?? (await AgentModule.defaultAgent())
+        modelText = `${model.providerID}/${model.modelID}`
+        agentText = agent
 
-      const cmd = (() => {
-        const text = parts
-          .filter((p): p is { type: "text"; text: string } => p.type === "text")
-          .map((p) => p.text)
-          .join("")
-          .trim()
+        const traceState = this.promptTrace.get(sessionID)
+        if (traceState) {
+          traceState.model = modelText
+          traceState.agent = agentText
+          this.promptTrace.set(sessionID, traceState)
+        }
 
-        if (!text.startsWith("/")) return
+        const partsParseStart = Date.now()
+        const parts: Array<
+          { type: "text"; text: string } | { type: "file"; url: string; filename: string; mime: string }
+        > = []
+        for (const part of params.prompt) {
+          switch (part.type) {
+            case "text":
+              parts.push({
+                type: "text" as const,
+                text: part.text,
+              })
+              break
+            case "image": {
+              const parsed = parseUri(part.uri ?? "")
+              const filename = parsed.type === "file" ? parsed.filename : "image"
+              if (part.data) {
+                parts.push({
+                  type: "file",
+                  url: `data:${part.mimeType};base64,${part.data}`,
+                  filename,
+                  mime: part.mimeType,
+                })
+              } else if (part.uri && part.uri.startsWith("http:")) {
+                parts.push({
+                  type: "file",
+                  url: part.uri,
+                  filename,
+                  mime: part.mimeType,
+                })
+              }
+              break
+            }
 
-        const [name, ...rest] = text.slice(1).split(/\s+/)
-        return { name, args: rest.join(" ").trim() }
-      })()
+            case "resource_link":
+              const parsed = parseUri(part.uri)
+              // Use the name from resource_link if available
+              if (part.name && parsed.type === "file") {
+                parsed.filename = part.name
+              }
+              parts.push(parsed)
 
-      const done = {
-        stopReason: "end_turn" as const,
-        _meta: {},
-      }
+              break
 
-      if (!cmd) {
-        await this.sdk.session.prompt({
-          sessionID,
-          model: {
-            providerID: model.providerID,
-            modelID: model.modelID,
-          },
-          system: typeof session.systemPrompt === "string" ? session.systemPrompt : session.systemPrompt?.append,
+            case "resource": {
+              const resource = part.resource
+              if ("text" in resource && resource.text) {
+                parts.push({
+                  type: "text",
+                  text: resource.text,
+                })
+              } else if ("blob" in resource && resource.blob && resource.mimeType) {
+                // Binary resource (PDFs, etc.): store as file part with data URL
+                const parsed = parseUri(resource.uri ?? "")
+                const filename = parsed.type === "file" ? parsed.filename : "file"
+                parts.push({
+                  type: "file",
+                  url: `data:${resource.mimeType};base64,${resource.blob}`,
+                  filename,
+                  mime: resource.mimeType,
+                })
+              }
+              break
+            }
+
+            default:
+              break
+          }
+        }
+        partsParseMs = Date.now() - partsParseStart
+        log.debug("acp.prompt.parts", {
+          requestId,
+          sessionId: sessionID,
+          partCount: parts.length,
           parts,
-          agent,
-          directory,
         })
-        return done
-      }
 
-      const command = await this.config.sdk.command
-        .list({ directory }, { throwOnError: true })
-        .then((x) => x.data!.find((c) => c.name === cmd.name))
-      if (command) {
-        await this.sdk.session.command({
-          sessionID,
-          command: command.name,
-          arguments: cmd.args,
-          model: model.providerID + "/" + model.modelID,
-          agent,
-          directory,
-        })
-        return done
-      }
+        const cmd = (() => {
+          const text = parts
+            .filter((p): p is { type: "text"; text: string } => p.type === "text")
+            .map((p) => p.text)
+            .join("")
+            .trim()
 
-      switch (cmd.name) {
-        case "compact":
-          await this.config.sdk.session.summarize(
-            {
-              sessionID,
-              directory,
+          if (!text.startsWith("/")) return
+
+          const [name, ...rest] = text.slice(1).split(/\s+/)
+          return { name, args: rest.join(" ").trim() }
+        })()
+
+        const done = {
+          stopReason: "end_turn" as const,
+          _meta: {},
+        }
+
+        if (!cmd) {
+          route = "sdk.session.prompt"
+          const routeExecStart = Date.now()
+          await this.sdk.session.prompt({
+            sessionID,
+            model: {
               providerID: model.providerID,
               modelID: model.modelID,
             },
-            { throwOnError: true },
-          )
-          break
-      }
+            system: typeof session.systemPrompt === "string" ? session.systemPrompt : session.systemPrompt?.append,
+            parts,
+            agent,
+            directory,
+          })
+          routeExecMs = Date.now() - routeExecStart
+          return done
+        }
 
-      return done
+        const routeLookupStart = Date.now()
+        const command = await this.config.sdk.command
+          .list({ directory }, { throwOnError: true })
+          .then((x) => x.data!.find((c) => c.name === cmd.name))
+        routeLookupMs = Date.now() - routeLookupStart
+        if (command) {
+          route = "sdk.session.command"
+          const routeExecStart = Date.now()
+          await this.sdk.session.command({
+            sessionID,
+            command: command.name,
+            arguments: cmd.args,
+            model: model.providerID + "/" + model.modelID,
+            agent,
+            directory,
+          })
+          routeExecMs = Date.now() - routeExecStart
+          return done
+        }
+
+        switch (cmd.name) {
+          case "compact": {
+            route = "sdk.session.summarize"
+            const routeExecStart = Date.now()
+            await this.config.sdk.session.summarize(
+              {
+                sessionID,
+                directory,
+                providerID: model.providerID,
+                modelID: model.modelID,
+              },
+              { throwOnError: true },
+            )
+            routeExecMs = Date.now() - routeExecStart
+            break
+          }
+          default:
+            route = `command.${cmd.name}.noop`
+            break
+        }
+
+        return done
+      } catch (error) {
+        log.error("acp.prompt.failed", {
+          error,
+          requestId,
+          sessionId: sessionID,
+          cwd: directory,
+          model: modelText,
+          agent: agentText,
+          totalMs: Date.now() - promptStartedAt,
+        })
+        throw error
+      } finally {
+        const totalMs = Date.now() - promptStartedAt
+        const traceState = this.promptTrace.get(sessionID)
+        if (traceState && !traceState.firstTokenLogged) {
+          log.info("acp.prompt.no-first-token", {
+            requestId,
+            sessionId: sessionID,
+            cwd: directory,
+            model: traceState.model,
+            agent: traceState.agent,
+            route,
+            totalMs,
+          })
+        }
+        this.promptTrace.delete(sessionID)
+        log.info("acp.prompt.total", {
+          requestId,
+          sessionId: sessionID,
+          cwd: directory,
+          model: modelText,
+          agent: agentText,
+          waitMcpInitMs,
+          partsParseMs,
+          routeLookupMs,
+          route,
+          routeExecMs,
+          totalMs,
+        })
+      }
     }
 
     async cancel(params: CancelNotification) {
@@ -1137,6 +1339,14 @@ export namespace ACP {
         { throwOnError: true },
       )
     }
+  }
+
+  function extractRequestId(meta: unknown): string | undefined {
+    if (!meta || typeof meta !== "object") return undefined
+    const record = meta as Record<string, unknown>
+    const candidate = [record["requestId"], record["request_id"], record["rid"]]
+      .find((item) => typeof item === "string" && item.trim().length > 0)
+    return typeof candidate === "string" ? candidate.trim() : undefined
   }
 
   function toToolKind(toolName: string): ToolKind {

@@ -3,23 +3,32 @@ import type { AgentSideConnection } from "@agentclientprotocol/sdk"
 import { z } from "zod"
 
 // Mock the Log module
-const logEntries: any[] = []
+const logEntries = ((globalThis as any).__acpLogEntries ??= []) as any[]
 mock.module("../../src/util/log", () => {
+  const createLogger = () => ({
+    info: (msg: any, extra: any) => {
+      logEntries.push({ level: "INFO", msg, ...extra })
+    },
+    error: (msg: any, extra: any) => {
+      logEntries.push({ level: "ERROR", msg, ...extra })
+    },
+    debug: () => { },
+    warn: () => { },
+    tag() {
+      return this
+    },
+    clone() {
+      return createLogger()
+    },
+    time: () => ({ stop: () => { } }),
+  })
+
   return {
     Log: {
-      create: () => ({
-        info: (msg: any, extra: any) => {
-          logEntries.push({ level: "INFO", msg, ...extra })
-        },
-        error: (msg: any, extra: any) => {
-          logEntries.push({ level: "ERROR", msg, ...extra })
-        },
-        debug: () => {},
-        warn: () => {},
-        time: () => ({ stop: () => {} })
-      }),
-      Level: z.enum(["DEBUG", "INFO", "WARN", "ERROR"])
-    }
+      create: createLogger,
+      Default: createLogger(),
+      Level: z.enum(["DEBUG", "INFO", "WARN", "ERROR"]),
+    },
   }
 })
 
@@ -254,8 +263,8 @@ describe("ACP System Prompt via _meta", () => {
 
     await acp.newSession(params as any)
 
-    const hasSystemPromptLog = logEntries.some(entry => 
-      entry.hasSystemPrompt === true && entry.level === "INFO"
+    const hasSystemPromptLog = logEntries.some(entry =>
+      (entry.hasSystemPrompt === true || entry.extra?.hasSystemPrompt === true) && entry.level === "INFO"
     )
     expect(hasSystemPromptLog).toBe(true)
   })
