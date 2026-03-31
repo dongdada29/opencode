@@ -852,9 +852,17 @@ export namespace Provider {
 
   const state = Instance.state(async () => {
     using _ = log.time("state")
+    const stateStartedAt = Date.now()
     const config = await Config.get()
+    const modelsDevStart = Date.now()
     const modelsDev = await ModelsDev.get()
+    const modelsDevMs = Date.now() - modelsDevStart
     const database = mapValues(modelsDev, fromModelsDevProvider)
+    log.info("provider.state.models-dev", {
+      modelsDevMs,
+      modelsDevProviders: Object.keys(modelsDev).length,
+      databaseProviders: Object.keys(database).length,
+    })
 
     const disabled = new Set(config.disabled_providers ?? [])
     const enabled = config.enabled_providers ? new Set(config.enabled_providers) : null
@@ -1334,6 +1342,13 @@ export namespace Provider {
       log.info("found", { providerID })
     }
 
+    const totalMs = Date.now() - stateStartedAt
+    log.info("provider.state.ready", {
+      totalMs,
+      providerCount: Object.keys(providers).length,
+      sdkCount: Array.from(sdk.keys()).length,
+      modelLoaderCount: Object.keys(modelLoaders).length,
+    })
     return {
       models: languages,
       providers,

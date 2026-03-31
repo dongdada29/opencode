@@ -321,8 +321,10 @@ export namespace MCP {
   }
 
   export async function addBatch(servers: Record<string, Config.Mcp>) {
+    const batchStartedAt = Date.now()
     const s = await state()
     const results: Record<string, MCP.Status> = {}
+    let reusedCount = 0
 
     // First pass: identify which servers need to be added/updated
     const toAdd: Record<string, Config.Mcp> = {}
@@ -343,6 +345,13 @@ export namespace MCP {
         if (existingHash === configHash) {
           log.info("reusing existing MCP connection (config unchanged)", { name })
           results[name] = s.status[name]!
+          reusedCount += 1
+          log.info("mcp.addBatch.server.summary", {
+            name,
+            branch: "reused_connected",
+            status: s.status[name]!.status,
+            totalMs: 0,
+          })
           continue
         }
         log.info("MCP config changed, will reconnect", { name })
@@ -353,51 +362,125 @@ export namespace MCP {
     // Second pass: add new/updated servers in parallel
     await Promise.all(
       Object.entries(toAdd).map(async ([name, mcp]) => {
-        const result = await create(name, mcp)
-        if (!result) {
+        const serverStartedAt = Date.now()
+        try {
+          const result = await create(name, mcp)
+          if (!result) {
+            const status = {
+              status: "failed" as const,
+              error: "unknown error",
+            }
+            s.status[name] = status
+            results[name] = status
+            log.info("mcp.addBatch.server.summary", {
+              name,
+              branch: "create_undefined",
+              status: status.status,
+              error: status.error,
+              totalMs: Date.now() - serverStartedAt,
+            })
+            return
+          }
+          if (!result.mcpClient) {
+            s.status[name] = result.status
+            results[name] = result.status
+            log.info("mcp.addBatch.server.summary", {
+              name,
+              branch: "create_no_client",
+              status: result.status.status,
+              error: "error" in result.status ? result.status.error : undefined,
+              totalMs: Date.now() - serverStartedAt,
+            })
+            return
+          }
+
+          // Close existing client if present
+          const oldClient = s.clients[name]
+          if (oldClient) {
+            await oldClient.close().catch((error) => {
+              log.error("Failed to close existing MCP client", { name, error })
+            })
+          }
+
+          s.clients[name] = result.mcpClient
+          s.status[name] = result.status
+          // Compute and store hash for the newly added client
+          s.configHashes[name] = JSON.stringify({
+            type: mcp.type,
+            command: mcp.type === "local" ? mcp.command : undefined,
+            environment: mcp.type === "local" ? mcp.environment : undefined,
+            url: mcp.type === "remote" ? mcp.url : undefined,
+            headers: mcp.type === "remote" ? mcp.headers : undefined,
+          })
+          results[name] = result.status
+          log.info("MCP client added (batch)", { name })
+          log.info("mcp.addBatch.server.summary", {
+            name,
+            branch: "connected",
+            status: result.status.status,
+            totalMs: Date.now() - serverStartedAt,
+          })
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : String(error)
+          log.error("mcp.addBatch.server.failed", { name, error: errorMessage })
           const status = {
             status: "failed" as const,
-            error: "unknown error",
+            error: errorMessage,
           }
           s.status[name] = status
           results[name] = status
-          return
-        }
-        if (!result.mcpClient) {
-          s.status[name] = result.status
-          results[name] = result.status
-          return
-        }
-        
-        // Close existing client if present
-        const oldClient = s.clients[name]
-        if (oldClient) {
-          await oldClient.close().catch((error) => {
-            log.error("Failed to close existing MCP client", { name, error })
+          log.info("mcp.addBatch.server.summary", {
+            name,
+            branch: "create_threw",
+            status: status.status,
+            error: status.error,
+            totalMs: Date.now() - serverStartedAt,
           })
         }
-
-        s.clients[name] = result.mcpClient
-        s.status[name] = result.status
-        // Compute and store hash for the newly added client
-        s.configHashes[name] = JSON.stringify({
-          type: mcp.type,
-          command: mcp.type === "local" ? mcp.command : undefined,
-          environment: mcp.type === "local" ? mcp.environment : undefined,
-          url: mcp.type === "remote" ? mcp.url : undefined,
-          headers: mcp.type === "remote" ? mcp.headers : undefined,
-        })
-        results[name] = result.status
-        log.info("MCP client added (batch)", { name })
       })
     )
+
+    const statuses = Object.values(results)
+    const connectedCount = statuses.filter((s0) => s0.status === "connected").length
+    const failedCount = statuses.filter((s0) => s0.status === "failed").length
+    const disabledCount = statuses.filter((s0) => s0.status === "disabled").length
+    const authPendingCount = statuses.filter(
+      (s0) => s0.status === "needs_auth" || s0.status === "needs_client_registration",
+    ).length
+    log.info("mcp.addBatch.summary", {
+      inputCount: Object.keys(servers).length,
+      toAddCount: Object.keys(toAdd).length,
+      reusedCount,
+      connectedCount,
+      failedCount,
+      disabledCount,
+      authPendingCount,
+      totalMs: Date.now() - batchStartedAt,
+    })
 
     return { status: results }
   }
 
   async function create(key: string, mcp: Config.Mcp) {
+    const createStartedAt = Date.now()
+    let connectMs = 0
+    let listToolsMs = 0
+    let transportUsed: string | undefined
+    const logCreateSummary = (extra: Record<string, unknown>) => {
+      log.info("mcp.create.summary", {
+        key,
+        type: mcp.type,
+        transport: transportUsed,
+        connectMs,
+        listToolsMs,
+        totalMs: Date.now() - createStartedAt,
+        ...extra,
+      })
+    }
+
     if (mcp.enabled === false) {
       log.info("mcp server disabled", { key })
+      logCreateSummary({ status: "disabled" })
       return {
         mcpClient: undefined,
         status: { status: "disabled" as const },
@@ -452,12 +535,15 @@ export namespace MCP {
       let lastError: Error | undefined
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
       for (const { name, transport } of transports) {
+        const connectStartedAt = Date.now()
         try {
           const client = new Client({
             name: "opencode",
             version: Installation.VERSION,
           })
           await withTimeout(client.connect(transport), connectTimeout)
+          connectMs = Date.now() - connectStartedAt
+          transportUsed = name
           registerNotificationHandlers(client, key)
           mcpClient = client
           log.info("connected", { key, transport: name })
@@ -530,12 +616,15 @@ export namespace MCP {
       })
 
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
+      const connectStartedAt = Date.now()
       try {
         const client = new Client({
           name: "opencode",
           version: Installation.VERSION,
         })
         await withTimeout(client.connect(transport), connectTimeout)
+        connectMs = Date.now() - connectStartedAt
+        transportUsed = "stdio"
         registerNotificationHandlers(client, key)
         mcpClient = client
         status = {
@@ -563,16 +652,22 @@ export namespace MCP {
     }
 
     if (!mcpClient) {
+      logCreateSummary({
+        status: status.status,
+        error: "error" in status ? status.error : undefined,
+      })
       return {
         mcpClient: undefined,
         status,
       }
     }
 
+    const listToolsStartedAt = Date.now()
     const result = await withTimeout(mcpClient.listTools(), mcp.timeout ?? DEFAULT_TIMEOUT).catch((err) => {
       log.error("failed to get tools from client", { key, error: err })
       return undefined
     })
+    listToolsMs = Date.now() - listToolsStartedAt
     if (!result) {
       await mcpClient.close().catch((error) => {
         log.error("Failed to close MCP client", {
@@ -583,6 +678,10 @@ export namespace MCP {
         status: "failed",
         error: "Failed to get tools",
       }
+      logCreateSummary({
+        status: "failed",
+        error: "Failed to get tools",
+      })
       return {
         mcpClient: undefined,
         status: {
@@ -593,6 +692,10 @@ export namespace MCP {
     }
 
     log.info("create() successfully created client", { key, toolCount: result.tools.length, tools: result.tools.map(t => t.name) })
+    logCreateSummary({
+      status: status.status,
+      toolCount: result.tools.length,
+    })
     return {
       mcpClient,
       status,

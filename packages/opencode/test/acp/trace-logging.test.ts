@@ -204,6 +204,110 @@ describe("acp trace logging", () => {
     ; (agent as any).eventAbort.abort()
   })
 
+  test("prompt non_blocking 超时后继续执行，并清理等待句柄避免后续重复等待", async () => {
+    const { agent } = createAgent()
+
+    ; (agent as any).sessionManager.get = () => ({
+      id: "session-trace-mcp-timeout",
+      cwd: "/tmp/trace-mcp-timeout",
+      model: { providerID: "opencode", modelID: "big-pickle" },
+      modeId: "build",
+      mcpServers: [],
+    })
+    let pendingMcpInitPromise: Promise<void> | undefined = new Promise<void>(() => { })
+    ; (agent as any).sessionManager.getMcpInitPromise = () => pendingMcpInitPromise
+    let clearCount = 0
+    ; (agent as any).sessionManager.clearMcpInitPromise = () => {
+      clearCount += 1
+      pendingMcpInitPromise = undefined
+    }
+
+    await agent.prompt({
+      sessionId: "session-trace-mcp-timeout",
+      prompt: [{ type: "text", text: "hello" }],
+      _meta: {
+        requestId: "rid-mcp-timeout-001",
+        mcpInitPolicy: "non_blocking",
+        mcpInitTimeoutMs: 1,
+      },
+    } as any)
+
+    const waitLog = findLog("INFO", "acp.prompt.mcp-init.wait")
+    const total = findLog("INFO", "acp.prompt.total")
+    expect(waitLog?.extra?.requestId).toBe("rid-mcp-timeout-001")
+    expect(waitLog?.extra?.outcome).toBe("timeout")
+    expect(waitLog?.extra?.policy).toBe("non_blocking")
+    expect(total?.extra?.mcpInitPolicy).toBe("non_blocking")
+    expect(total?.extra?.mcpInitWaitOutcome).toBe("timeout")
+    expect(clearCount).toBe(1)
+
+    const waitLogCountAfterFirstPrompt = logEntries.filter(
+      (entry) => entry.level === "INFO" && entry.msg === "acp.prompt.mcp-init.wait",
+    ).length
+
+    await agent.prompt({
+      sessionId: "session-trace-mcp-timeout",
+      prompt: [{ type: "text", text: "hello-again" }],
+      _meta: {
+        requestId: "rid-mcp-timeout-002",
+        mcpInitPolicy: "non_blocking",
+        mcpInitTimeoutMs: 1,
+      },
+    } as any)
+
+    const waitLogCountAfterSecondPrompt = logEntries.filter(
+      (entry) => entry.level === "INFO" && entry.msg === "acp.prompt.mcp-init.wait",
+    ).length
+    expect(waitLogCountAfterSecondPrompt).toBe(waitLogCountAfterFirstPrompt)
+
+    ; (agent as any).eventAbort.abort()
+  })
+
+  test("prompt blocking 仍等待 mcpInit 完成后再继续", async () => {
+    const { agent } = createAgent()
+
+    ; (agent as any).sessionManager.get = () => ({
+      id: "session-trace-mcp-blocking",
+      cwd: "/tmp/trace-mcp-blocking",
+      model: { providerID: "opencode", modelID: "big-pickle" },
+      modeId: "build",
+      mcpServers: [],
+    })
+    let resolveMcpInit: (() => void) | undefined
+    const mcpInitPromise = new Promise<void>((resolve) => {
+      resolveMcpInit = resolve
+    })
+    ; (agent as any).sessionManager.getMcpInitPromise = () => mcpInitPromise
+    let clearCount = 0
+    ; (agent as any).sessionManager.clearMcpInitPromise = () => {
+      clearCount += 1
+    }
+
+    const promptTask = agent.prompt({
+      sessionId: "session-trace-mcp-blocking",
+      prompt: [{ type: "text", text: "hello" }],
+      _meta: {
+        requestId: "rid-mcp-blocking-001",
+        mcpInitPolicy: "blocking",
+      },
+    } as any)
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    resolveMcpInit?.()
+    await promptTask
+
+    const waitLog = findLog("INFO", "acp.prompt.mcp-init.wait")
+    const total = findLog("INFO", "acp.prompt.total")
+    expect(waitLog?.extra?.requestId).toBe("rid-mcp-blocking-001")
+    expect(waitLog?.extra?.outcome).toBe("completed")
+    expect(waitLog?.extra?.policy).toBe("blocking")
+    expect(total?.extra?.mcpInitPolicy).toBe("blocking")
+    expect(total?.extra?.mcpInitWaitOutcome).toBe("completed")
+    expect(clearCount).toBe(1)
+
+    ; (agent as any).eventAbort.abort()
+  })
+
   test("prompt failure path logs acp.prompt.failed with requestId", async () => {
     const { agent } = createAgent({
       sessionPrompt: async () => {

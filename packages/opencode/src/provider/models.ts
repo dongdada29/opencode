@@ -77,20 +77,47 @@ export namespace ModelsDev {
   export type Provider = z.infer<typeof Provider>
 
   export async function get() {
+    const startedAt = Date.now()
     refresh()
     const file = Bun.file(filepath)
     const result = await file.json().catch(() => {})
-    if (result) return result as Record<string, Provider>
-    if (typeof data === "function") {
-      const json = await data()
-      return JSON.parse(json) as Record<string, Provider>
+    if (result) {
+      const providers = result as Record<string, Provider>
+      log.info("models.get", {
+        source: "cache_file",
+        providerCount: Object.keys(providers).length,
+        totalMs: Date.now() - startedAt,
+        filepath,
+      })
+      return providers
     }
+    if (typeof data === "function") {
+      const macroStart = Date.now()
+      const json = await data()
+      const providers = JSON.parse(json) as Record<string, Provider>
+      log.info("models.get", {
+        source: "macro",
+        providerCount: Object.keys(providers).length,
+        macroMs: Date.now() - macroStart,
+        totalMs: Date.now() - startedAt,
+      })
+      return providers
+    }
+    const fetchStart = Date.now()
     const json = await fetch("https://models.dev/api.json").then((x) => x.text())
-    return JSON.parse(json) as Record<string, Provider>
+    const providers = JSON.parse(json) as Record<string, Provider>
+    log.info("models.get", {
+      source: "network_fetch",
+      providerCount: Object.keys(providers).length,
+      fetchMs: Date.now() - fetchStart,
+      totalMs: Date.now() - startedAt,
+    })
+    return providers
   }
 
   export async function refresh() {
     if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return
+    const refreshStart = Date.now()
     const file = Bun.file(filepath)
     log.info("refreshing", {
       file,
@@ -103,9 +130,23 @@ export namespace ModelsDev {
     }).catch((e) => {
       log.error("Failed to fetch models.dev", {
         error: e,
+        elapsedMs: Date.now() - refreshStart,
       })
     })
-    if (result && result.ok) await Bun.write(file, await result.text())
+    if (result && result.ok) {
+      const text = await result.text()
+      await Bun.write(file, text)
+      log.info("models.refresh.done", {
+        elapsedMs: Date.now() - refreshStart,
+        bytes: text.length,
+        filepath,
+      })
+    } else {
+      log.warn("models.refresh.skipped", {
+        elapsedMs: Date.now() - refreshStart,
+        status: result?.status,
+      })
+    }
   }
 }
 

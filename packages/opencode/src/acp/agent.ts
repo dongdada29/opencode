@@ -50,6 +50,19 @@ export namespace ACP {
     firstTokenLogged: boolean
   }
 
+  type McpInitPolicy = "blocking" | "non_blocking"
+
+  interface McpInitWaitConfig {
+    policy: McpInitPolicy
+    timeoutMs: number
+  }
+
+  const DEFAULT_MCP_INIT_WAIT_CONFIG: McpInitWaitConfig = {
+    policy: "blocking",
+    timeoutMs: 500,
+  }
+  const MAX_MCP_INIT_TIMEOUT_MS = 10_000
+
   export async function init({ sdk: _sdk }: { sdk: OpencodeClient }) {
     return {
       create: (connection: AgentSideConnection, fullConfig: ACPConfig) => {
@@ -83,6 +96,52 @@ export namespace ACP {
 
     private resolveRequestId(meta: unknown): string {
       return extractRequestId(meta) ?? `acp-${crypto.randomUUID()}`
+    }
+
+    private resolveMcpInitWaitConfig(meta: unknown): McpInitWaitConfig {
+      const parsed: McpInitWaitConfig = { ...DEFAULT_MCP_INIT_WAIT_CONFIG }
+      if (!meta || typeof meta !== "object") return parsed
+
+      const record = meta as Record<string, unknown>
+      const rawPolicy = record["mcpInitPolicy"]
+      if (rawPolicy === "blocking" || rawPolicy === "non_blocking") {
+        parsed.policy = rawPolicy
+      }
+
+      const rawTimeout = record["mcpInitTimeoutMs"]
+      const timeoutNum =
+        typeof rawTimeout === "number"
+          ? rawTimeout
+          : typeof rawTimeout === "string"
+            ? Number(rawTimeout)
+            : Number.NaN
+      if (Number.isFinite(timeoutNum)) {
+        parsed.timeoutMs = Math.min(
+          MAX_MCP_INIT_TIMEOUT_MS,
+          Math.max(0, Math.floor(timeoutNum)),
+        )
+      }
+
+      return parsed
+    }
+
+    private async waitMcpInitWithTimeout(
+      mcpInitPromise: Promise<void>,
+      timeoutMs: number,
+    ): Promise<"completed" | "timeout"> {
+      if (timeoutMs <= 0) return "timeout"
+      let timer: ReturnType<typeof setTimeout> | undefined
+      try {
+        const result = await Promise.race<"completed" | "timeout">([
+          mcpInitPromise.then(() => "completed" as const),
+          new Promise<"timeout">((resolve) => {
+            timer = setTimeout(() => resolve("timeout"), timeoutMs)
+          }),
+        ])
+        return result
+      } finally {
+        if (timer) clearTimeout(timer)
+      }
     }
 
     private markPromptStart(context: ACPTraceContext) {
@@ -1106,15 +1165,39 @@ export namespace ACP {
       let route = "unknown"
       let modelText: string | undefined
       let agentText: string | undefined
+      const mcpInitWaitConfig = this.resolveMcpInitWaitConfig(params._meta)
+      let mcpInitWaitOutcome: "skipped" | "completed" | "timeout" = "skipped"
 
       try {
         // 等待 MCP 懒加载完成（如果有）
         const mcpInit = this.sessionManager.getMcpInitPromise(sessionID)
         if (mcpInit) {
           const waitMcpInitStart = Date.now()
-          await mcpInit
+          if (mcpInitWaitConfig.policy === "blocking") {
+            await mcpInit
+            mcpInitWaitOutcome = "completed"
+          } else {
+            mcpInitWaitOutcome = await this.waitMcpInitWithTimeout(
+              mcpInit,
+              mcpInitWaitConfig.timeoutMs,
+            )
+          }
           waitMcpInitMs = Date.now() - waitMcpInitStart
-          this.sessionManager.clearMcpInitPromise(sessionID)
+          const shouldClearMcpInitPromise =
+            mcpInitWaitOutcome === "completed" ||
+            (mcpInitWaitConfig.policy === "non_blocking" &&
+              mcpInitWaitOutcome === "timeout")
+          if (shouldClearMcpInitPromise) {
+            this.sessionManager.clearMcpInitPromise(sessionID)
+          }
+          log.info("acp.prompt.mcp-init.wait", {
+            requestId,
+            sessionId: sessionID,
+            policy: mcpInitWaitConfig.policy,
+            timeoutMs: mcpInitWaitConfig.timeoutMs,
+            waitMcpInitMs,
+            outcome: mcpInitWaitOutcome,
+          })
         }
 
         const current = session.model
@@ -1320,6 +1403,9 @@ export namespace ACP {
           model: modelText,
           agent: agentText,
           waitMcpInitMs,
+          mcpInitPolicy: mcpInitWaitConfig.policy,
+          mcpInitTimeoutMs: mcpInitWaitConfig.timeoutMs,
+          mcpInitWaitOutcome,
           partsParseMs,
           routeLookupMs,
           route,
@@ -1401,20 +1487,36 @@ export namespace ACP {
   const MODEL_CACHE_TTL = 60_000
 
   async function defaultModel(config: ACPConfig, cwd?: string) {
+    const startedAt = Date.now()
     const sdk = config.sdk
     const configured = config.defaultModel
-    if (configured) return configured
+    if (configured) {
+      log.info("defaultModel.resolve", {
+        source: "config.defaultModel",
+        providerID: configured.providerID,
+        modelID: configured.modelID,
+        totalMs: Date.now() - startedAt,
+      })
+      return configured
+    }
 
     const directory = cwd ?? process.cwd()
 
     // Check cache first
     const cached = modelCache.get(directory)
     if (cached && Date.now() < cached.expires) {
-      log.debug("defaultModel.cache.hit", { directory })
+      log.info("defaultModel.resolve", {
+        source: "memory_cache",
+        directory,
+        providerID: cached.model.providerID,
+        modelID: cached.model.modelID,
+        totalMs: Date.now() - startedAt,
+      })
       return cached.model
     }
 
     // Parallel fetch: config.get + providers
+    const configGetStart = Date.now()
     const [specified, providers] = await Promise.all([
       sdk.config
         .get({ directory }, { throwOnError: true })
@@ -1439,10 +1541,24 @@ export namespace ACP {
           return []
         }),
     ])
+    const configGetMs = Date.now() - configGetStart
+    log.info("defaultModel.fetch", {
+      directory,
+      configGetMs,
+      providerCount: providers.length,
+      hasSpecified: !!specified,
+    })
 
     // If user specified a model, use it directly without validation
     if (specified) {
       modelCache.set(directory, { model: specified, expires: Date.now() + MODEL_CACHE_TTL })
+      log.info("defaultModel.resolve", {
+        source: "user_config",
+        directory,
+        providerID: specified.providerID,
+        modelID: specified.modelID,
+        totalMs: Date.now() - startedAt,
+      })
       return specified
     }
 
@@ -1472,6 +1588,13 @@ export namespace ACP {
     }
 
     modelCache.set(directory, { model: result, expires: Date.now() + MODEL_CACHE_TTL })
+    log.info("defaultModel.resolve", {
+      source: "provider_fallback",
+      directory,
+      providerID: result.providerID,
+      modelID: result.modelID,
+      totalMs: Date.now() - startedAt,
+    })
     return result
   }
 
