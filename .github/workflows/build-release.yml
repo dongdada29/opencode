@@ -85,7 +85,7 @@ jobs:
 
   release:
     needs: build
-    if: always() && needs.build.result != 'failed'
+    if: always() && needs.build.result == 'success'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
