@@ -65,8 +65,19 @@ export namespace Log {
     write(msg + "\n")
   }
 
+  // Validate a directory path: reject null bytes and non-string values.
+  // Bun-compiled native binaries may produce env vars filled with \u0000
+  // when the parent process passes env via spawn(); detect and reject early.
+  function isValidDirPath(dir: unknown): dir is string {
+    return typeof dir === "string" && dir.length > 0 && !dir.includes("\0")
+  }
+
   // Initial setup function to share logic between early init and explicit init
   function setup(dir: string, printLogs: boolean) {
+    if (!isValidDirPath(dir)) {
+      console.error("Log dir is invalid (empty or contains null bytes), skipping file logging. dir repr:", JSON.stringify(dir).slice(0, 200))
+      return
+    }
     try {
       // Use sync mkdir for early init safety, it's fine for init() too
       // However, fs/promises is imported as fs. We need 'fs' or 'node:fs' for sync.
@@ -122,7 +133,8 @@ export namespace Log {
   }
 
   // Early initialization: Check Env Var immediately
-  if (process.env.OPENCODE_LOG_DIR) {
+  // Guard: skip if env var is corrupted (e.g. Bun-compiled binary returns null-byte-filled string)
+  if (process.env.OPENCODE_LOG_DIR && isValidDirPath(process.env.OPENCODE_LOG_DIR)) {
     const print = process.argv.includes("--print-logs")
     setup(process.env.OPENCODE_LOG_DIR, print)
   }
@@ -140,7 +152,8 @@ export namespace Log {
     const targetDir = options.dir ?? process.env.OPENCODE_LOG_DIR ?? (options.print ? undefined : Global.Path.log)
 
     // If no directory desired (and not suppressed default logic), return.
-    if (!targetDir) {
+    // Also skip if targetDir contains null bytes (corrupted env var in Bun-compiled binary).
+    if (!targetDir || !isValidDirPath(targetDir)) {
       suppress = !options.print
       return
     }
