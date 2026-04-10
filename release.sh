@@ -4,15 +4,22 @@
 # Usage: ./release.sh <new_version> [otp_code]
 # Example: ./release.sh 1.1.52
 # Example with OTP: ./release.sh 1.1.52 123456
+#
+# NPM dist-tag (default: latest). Set to e.g. beta to publish without moving latest:
+#   NPM_DIST_TAG=beta ./release.sh 1.1.72
+#   NPM_DIST_TAG=beta ./release.sh 1.1.72 123456
 
 set -e
 
 NEW_VERSION=$1
 OTP_CODE=$2
+# 未设置时与历史行为一致：打 latest；设为 beta/next 等则只打该 tag，不挂 latest
+NPM_DIST_TAG="${NPM_DIST_TAG:-latest}"
 
 if [ -z "$NEW_VERSION" ]; then
   echo "Error: Please provide a version number."
   echo "Usage: ./release.sh <new_version> [otp_code]"
+  echo "Optional: NPM_DIST_TAG=beta ./release.sh <new_version> [otp_code]"
   exit 1
 fi
 
@@ -50,10 +57,16 @@ echo "📝 Please ensure you have updated CHANGELOG-nuwaxcode.md"
 read -p "Press Enter to continue if changelog is updated (or Ctrl+C to abort)..."
 
 # Run publish
-echo "🚀 Publishing to NPM..."
+echo "🚀 Publishing to NPM (dist-tag: ${NPM_DIST_TAG})..."
 cd packages/opencode
 
-PUBLISH_CMD="bun run publish --latest"
+if [ "$NPM_DIST_TAG" = "latest" ]; then
+  PUBLISH_CMD="bun run publish --latest"
+else
+  # packages/opencode/script/publish.ts：无 --latest 时仅用 Script.channel，不添加 latest
+  export OPENCODE_CHANNEL="$NPM_DIST_TAG"
+  PUBLISH_CMD="bun run publish"
+fi
 
 if [ ! -z "$OTP_CODE" ]; then
     PUBLISH_CMD="$PUBLISH_CMD --otp=$OTP_CODE"

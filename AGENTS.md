@@ -9,5 +9,6 @@
      - The script will automatically:
        - Bump version in `packages/opencode/package.json`.
        - Sync all `optionalDependencies`.
-       - Run `publish` with `--latest`.
+       - Run `publish` with `--latest` (default `NPM_DIST_TAG=latest`).
        - (Optional) Pass OTP as second argument: `./release.sh 1.1.52 123456`
+     - **Pre-release / do not move `latest`**: set `NPM_DIST_TAG=beta` (or another tag). Example: `NPM_DIST_TAG=beta ./release.sh 1.1.72` — publishes under the `beta` dist-tag only; `npm install nuwaxcode` still resolves `latest` to the previous release.
