@@ -30,6 +30,15 @@ export namespace LLM {
 
   export const OUTPUT_TOKEN_MAX = Flag.OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX || 32_000
 
+// For kimi-k2 models, force use ProviderTransform temperature
+function forceTransformTemperature(model: Provider.Model): boolean {
+  const id = model.id.toLowerCase()
+  if (id.includes("kimi-k2") && ["thinking", "k2.", "k2p", "k2-5"].some((s) => id.includes(s))) {
+    return true
+  }
+  return false
+}
+
   export type StreamInput = {
     user: MessageV2.User
     sessionID: string
@@ -127,7 +136,7 @@ export namespace LLM {
       },
       {
         temperature: input.model.capabilities.temperature
-          ? (input.agent.temperature ?? ProviderTransform.temperature(input.model))
+          ? (forceTransformTemperature(input.model) ? ProviderTransform.temperature(input.model) : (input.agent.temperature ?? ProviderTransform.temperature(input.model)))
           : undefined,
         topP: input.agent.topP ?? ProviderTransform.topP(input.model),
         topK: ProviderTransform.topK(input.model),
