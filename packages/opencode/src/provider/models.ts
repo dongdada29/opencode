@@ -3,8 +3,8 @@ import { Log } from "../util/log"
 import path from "path"
 import z from "zod"
 import { data } from "./models-macro" with { type: "macro" }
-import { Installation } from "../installation"
 import { Flag } from "../flag/flag"
+import { fetchModelsFromSource } from "./models-source"
 
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
@@ -80,51 +80,22 @@ export namespace ModelsDev {
   export async function get() {
     const startedAt = Date.now()
     refresh()
-    const file = Bun.file(filepath)
-    const result = await file.json().catch(() => {})
-    if (result) {
-      const providers = result as Record<string, Provider>
-      log.info("models.get", {
-        source: "cache_file",
-        providerCount: Object.keys(providers).length,
+    const result = await fetchModelsFromSource({
+      cachePath: filepath,
+      bundledPath,
+      macroData: typeof data === "function" ? data : undefined,
+    })
+    if (!result.ok) {
+      log.error("models.get.all_sources_failed", {
         totalMs: Date.now() - startedAt,
-        filepath,
+        source: result.source,
       })
-      return providers
+      throw new Error("No models data available: cache, macro, bundled asset, and network all unavailable")
     }
-    if (typeof data === "function") {
-      const macroStart = Date.now()
-      const json = await data()
-      const providers = JSON.parse(json) as Record<string, Provider>
-      log.info("models.get", {
-        source: "macro",
-        providerCount: Object.keys(providers).length,
-        macroMs: Date.now() - macroStart,
-        totalMs: Date.now() - startedAt,
-      })
-      return providers
-    }
-
-    const bundledFile = Bun.file(bundledPath)
-    if (await bundledFile.exists()) {
-      const json = await bundledFile.text()
-      const providers = JSON.parse(json) as Record<string, Provider>
-      log.info("models.get", {
-        source: "bundled_asset",
-        providerCount: Object.keys(providers).length,
-        totalMs: Date.now() - startedAt,
-        filepath: bundledPath,
-      })
-      return providers
-    }
-
-    const fetchStart = Date.now()
-    const json = await fetch("https://models.dev/api.json").then((x) => x.text())
-    const providers = JSON.parse(json) as Record<string, Provider>
+    const providers = JSON.parse(result.data) as Record<string, Provider>
     log.info("models.get", {
-      source: "network_fetch",
+      source: result.source,
       providerCount: Object.keys(providers).length,
-      fetchMs: Date.now() - fetchStart,
       totalMs: Date.now() - startedAt,
     })
     return providers
@@ -133,35 +104,31 @@ export namespace ModelsDev {
   export async function refresh() {
     if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return
     const refreshStart = Date.now()
-    const file = Bun.file(filepath)
-    log.info("refreshing", {
-      file,
+
+    // Refresh uses local sources only — no network fetch
+    const result = await fetchModelsFromSource({
+      cachePath: filepath,
+      bundledPath,
+      skipCache: true,
+      skipNetwork: true,
     })
-    const result = await fetch("https://models.dev/api.json", {
-      headers: {
-        "User-Agent": Installation.USER_AGENT,
-      },
-      signal: AbortSignal.timeout(10 * 1000),
-    }).catch((e) => {
-      log.error("Failed to fetch models.dev", {
-        error: e,
-        elapsedMs: Date.now() - refreshStart,
-      })
-    })
-    if (result && result.ok) {
-      const text = await result.text()
-      await Bun.write(file, text)
-      log.info("models.refresh.done", {
-        elapsedMs: Date.now() - refreshStart,
-        bytes: text.length,
-        filepath,
-      })
-    } else {
+
+    if (!result.ok) {
       log.warn("models.refresh.skipped", {
         elapsedMs: Date.now() - refreshStart,
-        status: result?.status,
+        source: result.source,
       })
+      return
     }
+
+    const file = Bun.file(filepath)
+    await Bun.write(file, result.data)
+    log.info("models.refresh.done", {
+      source: result.source,
+      elapsedMs: Date.now() - refreshStart,
+      bytes: result.data.length,
+      filepath,
+    })
   }
 }
 
