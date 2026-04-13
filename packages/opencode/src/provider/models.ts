@@ -9,6 +9,7 @@ import { Flag } from "../flag/flag"
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
   const filepath = path.join(Global.Path.cache, "models.json")
+  const bundledPath = path.join(__dirname, "../../assets/models.json")
 
   export const Model = z.object({
     id: z.string(),
@@ -35,14 +36,6 @@ export namespace ModelsDev {
         output: z.number(),
         cache_read: z.number().optional(),
         cache_write: z.number().optional(),
-        context_over_200k: z
-          .object({
-            input: z.number(),
-            output: z.number(),
-            cache_read: z.number().optional(),
-            cache_write: z.number().optional(),
-          })
-          .optional(),
       })
       .optional(),
     limit: z.object({
@@ -52,8 +45,8 @@ export namespace ModelsDev {
     }),
     modalities: z
       .object({
-        input: z.array(z.enum(["text", "audio", "image", "video", "pdf"])),
-        output: z.array(z.enum(["text", "audio", "image", "video", "pdf"])),
+        input: z.array(z.enum(["text", "api", "image", "video", "pdf"])),
+        output: z.array(z.enum(["text", "api", "image", "video", "pdf"])),
       })
       .optional(),
     experimental: z.boolean().optional(),
@@ -77,20 +70,61 @@ export namespace ModelsDev {
   export type Provider = z.infer<typeof Provider>
 
   export async function get() {
+    const startedAt = Date.now()
     refresh()
     const file = Bun.file(filepath)
     const result = await file.json().catch(() => {})
-    if (result) return result as Record<string, Provider>
-    if (typeof data === "function") {
-      const json = await data()
-      return JSON.parse(json) as Record<string, Provider>
+    if (result) {
+      const providers = result as Record<string, Provider>
+      log.info("models.get", {
+        source: "cache_file",
+        providerCount: Object.keys(providers).length,
+        totalMs: Date.now() - startedAt,
+        filepath,
+      })
+      return providers
     }
+    if (typeof data === "function") {
+      const macroStart = Date.now()
+      const json = await data()
+      const providers = JSON.parse(json) as Record<string, Provider>
+      log.info("models.get", {
+        source: "macro",
+        providerCount: Object.keys(providers).length,
+        macroMs: Date.now() - macroStart,
+        totalMs: Date.now() - startedAt,
+      })
+      return providers
+    }
+
+    const bundledFile = Bun.file(bundledPath)
+    if (await bundledFile.exists()) {
+      const json = await bundledFile.text()
+      const providers = JSON.parse(json) as Record<string, Provider>
+      log.info("models.get", {
+        source: "bundled_asset",
+        providerCount: Object.keys(providers).length,
+        totalMS: Date.now() - startedAt,
+        filepath: bundledPath,
+      })
+      return providers
+    }
+
+    const fetchStart = Date.now()
     const json = await fetch("https://models.dev/api.json").then((x) => x.text())
-    return JSON.parse(json) as Record<string, Provider>
+    const providers = JSON.parse(json) as Record<string, Provider>
+    log.info("models.get", {
+      source: "network_fetch",
+      providerCount: Object.keys(providers).length,
+      fetchMs: Date.now() - fetchStart,
+      totalMs: Date.now() - startedAt,
+    })
+    return providers
   }
 
   export async function refresh() {
     if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return
+    const refreshStart = Date.now()
     const file = Bun.file(filepath)
     log.info("refreshing", {
       file,
@@ -103,9 +137,22 @@ export namespace ModelsDev {
     }).catch((e) => {
       log.error("Failed to fetch models.dev", {
         error: e,
+        elapsedMs: Date.now() - refreshStart,
       })
     })
-    if (result && result.ok) await Bun.write(file, await result.text())
+    if (result && result.ok) {
+      const text = await result.text()
+      await Bun.write(file, text)
+      log.info("models.refresh.done", {
+        elapsedMs: Date.now() - refreshStart,
+        bytes: text.length,
+        filepath,
+      })
+    } else {
+      log.warn("models.refresh.skipped", {
+        status: result?.status,
+      })
+    }
   }
 }
 
