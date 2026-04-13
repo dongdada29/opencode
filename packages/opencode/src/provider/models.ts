@@ -1,5 +1,3 @@
-declare const OPENCODE_MODELS_PATH: string | undefined
-
 import { Global } from "../global"
 import { Log } from "../util/log"
 import path from "path"
@@ -11,9 +9,12 @@ import { fetchModelsFromSource } from "./models-source"
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
   const filepath = path.join(Global.Path.cache, "models.json")
-  const bundledPath = typeof OPENCODE_MODELS_PATH !== "undefined"
-    ? OPENCODE_MODELS_PATH
-    : path.join(__dirname, "../../assets/models.json")
+
+  // Candidate paths for bundled models.json
+  const bundledPaths = [
+    path.join(path.dirname(process.execPath), "assets", "models.json"), // compiled binary: <bin>/assets/
+    path.join(__dirname, "../../assets/models.json"),                    // dev mode: source tree
+  ]
 
   export const Model = z.object({
     id: z.string(),
@@ -86,7 +87,7 @@ export namespace ModelsDev {
     refresh()
     const result = await fetchModelsFromSource({
       cachePath: filepath,
-      bundledPath,
+      bundledPaths,
       macroData: typeof data === "function" ? data : undefined,
     })
     if (!result.ok) {
@@ -112,7 +113,7 @@ export namespace ModelsDev {
     // Refresh uses local sources only — no network fetch
     const result = await fetchModelsFromSource({
       cachePath: filepath,
-      bundledPath,
+      bundledPaths,
       skipCache: true,
       skipNetwork: true,
     })

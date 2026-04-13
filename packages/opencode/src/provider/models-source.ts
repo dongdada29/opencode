@@ -10,8 +10,8 @@ export type SourceResult =
 export interface FetchModelsOptions {
   /** Path to the cache file (e.g. ~/.cache/opencode/models.json) */
   cachePath: string
-  /** Path to the bundled asset (e.g. ../../assets/models.json) */
-  bundledPath: string
+  /** Candidate paths for bundled asset (tries in order) */
+  bundledPaths: string[]
   /** Build-time macro data function, if available */
   macroData?: () => Promise<string>
   /** Skip reading from cache (useful for refresh) */
@@ -27,7 +27,7 @@ export interface FetchModelsOptions {
 export async function fetchModelsFromSource(options: FetchModelsOptions): Promise<SourceResult> {
   log.info("fetchFromSource.start", {
     cachePath: options.cachePath,
-    bundledPath: options.bundledPath,
+    bundledPaths: options.bundledPaths,
     skipCache: options.skipCache ?? false,
     skipNetwork: options.skipNetwork ?? false,
     hasMacroData: !!options.macroData,
@@ -52,18 +52,20 @@ export async function fetchModelsFromSource(options: FetchModelsOptions): Promis
     }
   }
 
-  // 3. Bundled asset
-  const bundledFile = Bun.file(options.bundledPath)
-  const bundledExists = await bundledFile.exists()
-  log.info("fetchFromSource.bundled_check", {
-    path: options.bundledPath,
-    exists: bundledExists,
-  })
-  if (bundledExists) {
-    const text = await bundledFile.text()
-    if (text) {
-      log.info("fetchFromSource.hit", { source: "bundled_asset", bytes: text.length })
-      return { ok: true, data: text, source: "bundled_asset" }
+  // 3. Bundled asset (try each candidate path)
+  for (const bundledPath of options.bundledPaths) {
+    const bundledFile = Bun.file(bundledPath)
+    const bundledExists = await bundledFile.exists()
+    log.info("fetchFromSource.bundled_check", {
+      path: bundledPath,
+      exists: bundledExists,
+    })
+    if (bundledExists) {
+      const text = await bundledFile.text()
+      if (text) {
+        log.info("fetchFromSource.hit", { source: "bundled_asset", bytes: text.length, path: bundledPath })
+        return { ok: true, data: text, source: "bundled_asset" }
+      }
     }
   }
 
