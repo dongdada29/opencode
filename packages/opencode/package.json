@@ -18,7 +18,8 @@
     "format": "echo 'Formatting code...' && bun run --prettier --write src/**/*.ts",
     "docs": "echo 'Generating documentation...' && find src -name '*.ts' -exec echo 'Processing: {}' \\;",
     "publish": "bun run script/publish.ts",
-    "deploy": "echo 'Deploying application...' && bun run build && echo 'Deployment completed successfully'"
+    "deploy": "echo 'Deploying application...' && bun run build && echo 'Deployment completed successfully'",
+    "update-models": "bun ../../scripts/update-models.ts"
   },
   "bin": {
     "nuwaxcode": "./bin/nuwaxcode"

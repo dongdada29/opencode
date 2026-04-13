@@ -9,6 +9,7 @@ import { Flag } from "../flag/flag"
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
   const filepath = path.join(Global.Path.cache, "models.json")
+  const bundledPath = path.join(__dirname, "../../assets/models.json")
 
   export const Model = z.object({
     id: z.string(),
@@ -103,6 +104,20 @@ export namespace ModelsDev {
       })
       return providers
     }
+
+    const bundledFile = Bun.file(bundledPath)
+    if (await bundledFile.exists()) {
+      const json = await bundledFile.text()
+      const providers = JSON.parse(json) as Record<string, Provider>
+      log.info("models.get", {
+        source: "bundled_asset",
+        providerCount: Object.keys(providers).length,
+        totalMs: Date.now() - startedAt,
+        filepath: bundledPath,
+      })
+      return providers
+    }
+
     const fetchStart = Date.now()
     const json = await fetch("https://models.dev/api.json").then((x) => x.text())
     const providers = JSON.parse(json) as Record<string, Provider>
