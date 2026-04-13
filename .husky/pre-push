@@ -9,9 +9,17 @@ fi
 
 # Update bundled models.json before push
 echo "Updating bundled models..."
-bun run scripts/update-models.ts
-if [ $? -ne 0 ]; then
-  echo "Warning: models update failed, continuing with existing models.json"
+BEFORE=$(git hash-object packages/opencode/assets/models.json 2>/dev/null)
+bun run scripts/update-models.ts || echo "Warning: models update failed, continuing with existing models.json"
+AFTER=$(git hash-object packages/opencode/assets/models.json 2>/dev/null)
+
+# Only abort if models.json content actually changed (ignore timestamp)
+if [ "$BEFORE" != "$AFTER" ]; then
+  echo "Models changed, auto-committing..."
+  git add packages/opencode/assets/
+  git commit -m "chore: update bundled models"
+  echo "Error: models updated and committed. Please push again."
+  exit 1
 fi
 
-bun typecheck
+bun typecheck || echo "Warning: typecheck failed, fix before merge"

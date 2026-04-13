@@ -29,3 +29,4 @@ logs/
 
 # Agent
 .agent
+packages/opencode/assets/models.last_updated
