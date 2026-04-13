@@ -1,3 +1,5 @@
+declare const OPENCODE_MODELS_PATH: string | undefined
+
 import { Global } from "../global"
 import { Log } from "../util/log"
 import path from "path"
@@ -9,7 +11,9 @@ import { fetchModelsFromSource } from "./models-source"
 export namespace ModelsDev {
   const log = Log.create({ service: "models.dev" })
   const filepath = path.join(Global.Path.cache, "models.json")
-  const bundledPath = path.join(__dirname, "../../assets/models.json")
+  const bundledPath = typeof OPENCODE_MODELS_PATH !== "undefined"
+    ? OPENCODE_MODELS_PATH
+    : path.join(__dirname, "../../assets/models.json")
 
   export const Model = z.object({
     id: z.string(),
