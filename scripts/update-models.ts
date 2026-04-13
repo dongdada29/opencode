@@ -1,5 +1,3 @@
-import { write } from "bun";
-
 const URL = "https://models.dev/api.json";
 const DEST_ACTUAL = "packages/opencode/assets/models.json";
 
@@ -8,7 +6,7 @@ async function update() {
   try {
     // Use curl as a fallback because Bun.fetch might have TLS issues in some environments
     const { execSync } = await import("child_process");
-    execSync(`curl -L -s ${URL} -o ${DEST_ACTUAL}`);
+    execSync(`curl -L -s --fail ${URL} -o ${DEST_ACTUAL}`);
     
     // Also update the timestamp file
     const timestampFile = DEST_ACTUAL.replace(".json", ".last_updated");

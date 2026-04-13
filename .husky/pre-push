@@ -6,4 +6,12 @@ if [ "$CURRENT_VERSION" != "$EXPECTED_VERSION" ]; then
   echo "Error: Bun version $CURRENT_VERSION does not match expected version $EXPECTED_VERSION from package.json"
   exit 1
 fi
+
+# Update bundled models.json before push
+echo "Updating bundled models..."
+bun run scripts/update-models.ts
+if [ $? -ne 0 ]; then
+  echo "Warning: models update failed, continuing with existing models.json"
+fi
+
 bun typecheck
