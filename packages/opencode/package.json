@@ -124,10 +124,10 @@
   "optionalDependencies": {
     "nuwaxcode-darwin-arm64": "1.1.75",
     "nuwaxcode-darwin-x64": "1.1.75",
-    "nuwaxcode-linux-arm64": "1.1.74",
+    "nuwaxcode-linux-arm64": "1.1.75",
     "nuwaxcode-linux-arm64-musl": "1.1.75",
     "nuwaxcode-linux-x64": "1.1.75",
     "nuwaxcode-linux-x64-musl": "1.1.75",
-    "nuwaxcode-windows-x64": "1.1.74"
+    "nuwaxcode-windows-x64": "1.1.75"
   }
 }
