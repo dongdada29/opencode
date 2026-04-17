@@ -8,6 +8,9 @@
 # NPM dist-tag (default: latest). Set to e.g. beta to publish without moving latest:
 #   NPM_DIST_TAG=beta ./release.sh 1.1.72
 #   NPM_DIST_TAG=beta ./release.sh 1.1.72 123456
+#
+# 发版结束后默认会校验 npm 上 optional 子包是否齐全；若需跳过（例如 registry 延迟）：
+#   SKIP_REGISTRY_VERIFY=1 ./release.sh 1.1.76
 
 set -e
 
@@ -81,5 +84,13 @@ fi
 
 # Execute publish
 eval $PUBLISH_CMD
+
+# 确认 registry 上主包声明的 optional 子包均已存在（避免「主包已发、子包缺失」）
+if [ "${SKIP_REGISTRY_VERIFY:-}" = "1" ]; then
+  echo "⏭️  SKIP_REGISTRY_VERIFY=1，跳过 npm optional 完整性校验"
+else
+  echo "🔍 校验 npm：nuwaxcode@${NEW_VERSION} 与全部 optional 子包…"
+  bun run script/verify-registry-complete.ts "$NEW_VERSION"
+fi
 
 echo "✅ Release $NEW_VERSION completed successfully!"

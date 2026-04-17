@@ -64,6 +64,10 @@ if (isLatest) {
   tags.push("latest")
 }
 
+// 所有带二进制文件的子包必须先成功发布到 npm，再发布主包 `nuwaxcode`。
+// 若子包发布失败却被忽略，主包仍会带上 optionalDependencies@当前版本，而 registry 上
+// 没有对应 tarball 时，用户执行 `npm i -g nuwaxcode` 时 optional 安装会静默失败，
+// postinstall 随后报错：Cannot find module 'nuwaxcode-linux-x64/package.json'。
 const tasks = Object.entries(binaries).map(async ([name]) => {
   if (process.platform !== "win32") {
     await $`chmod -R 755 .`.cwd(`./dist/${name}`)
@@ -71,11 +75,7 @@ const tasks = Object.entries(binaries).map(async ([name]) => {
   await $`bun pm pack`.cwd(`./dist/${name}`)
 
   const primaryTag = tags[0]
-  try {
-    await $`npm publish *.tgz --access public --tag ${primaryTag} ${otpFlags}`.cwd(`./dist/${name}`)
-  } catch (e) {
-    console.log(`Publish failed for ${name} (might check if version exists), continuing to tags...`)
-  }
+  await $`npm publish *.tgz --access public --tag ${primaryTag} ${otpFlags}`.cwd(`./dist/${name}`)
 
   for (const tag of tags.slice(1)) {
     await $`npm dist-tag add ${name}@${pkg.version} ${tag} ${otpFlags}`
@@ -86,11 +86,7 @@ await Promise.all(tasks)
 {
   await $`cd ./dist/${pkg.name} && bun pm pack`
   const primaryTag = tags[0]
-  try {
-    await $`npm publish *.tgz --access public --tag ${primaryTag} ${otpFlags}`.cwd(`./dist/${pkg.name}`)
-  } catch (e) {
-    console.log(`Publish failed for ${pkg.name} (might check if version exists), continuing to tags...`)
-  }
+  await $`npm publish *.tgz --access public --tag ${primaryTag} ${otpFlags}`.cwd(`./dist/${pkg.name}`)
 
   for (const tag of tags.slice(1)) {
     await $`npm dist-tag add ${pkg.name}@${pkg.version} ${tag} ${otpFlags}`

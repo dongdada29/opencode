@@ -76,7 +76,13 @@ function findBinary() {
 
     return { binaryPath, binaryName }
   } catch (error) {
-    throw new Error(`Could not find package ${packageName}: ${error.message}`)
+    // 常见原因：主包已发布但对应平台的 optional 子包未发布到同版本，npm 会跳过失败的 optional，
+    // 此处 require.resolve 即失败。可尝试安装子包存在的版本，例如 npm view nuwaxcode-linux-x64 versions
+    throw new Error(
+      `Could not find package ${packageName}: ${error.message}. ` +
+        `If you installed nuwaxcode globally, check npm output for optional dependency install failures; ` +
+        `the platform package for this version may be missing from the registry.`,
+    )
   }
 }
 

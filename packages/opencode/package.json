@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.1.75",
+  "version": "1.1.76",
   "name": "nuwaxcode",
   "type": "module",
   "license": "MIT",
@@ -18,6 +18,7 @@
     "format": "echo 'Formatting code...' && bun run --prettier --write src/**/*.ts",
     "docs": "echo 'Generating documentation...' && find src -name '*.ts' -exec echo 'Processing: {}' \\;",
     "publish": "bun run script/publish.ts",
+    "verify:registry": "bun run script/verify-registry-complete.ts",
     "deploy": "echo 'Deploying application...' && bun run build && echo 'Deployment completed successfully'",
     "update-models": "bun ../../scripts/update-models.ts"
   },
@@ -122,12 +123,12 @@
     "zod-to-json-schema": "3.24.5"
   },
   "optionalDependencies": {
-    "nuwaxcode-darwin-arm64": "1.1.75",
-    "nuwaxcode-darwin-x64": "1.1.75",
-    "nuwaxcode-linux-arm64": "1.1.75",
-    "nuwaxcode-linux-arm64-musl": "1.1.75",
-    "nuwaxcode-linux-x64": "1.1.75",
-    "nuwaxcode-linux-x64-musl": "1.1.75",
-    "nuwaxcode-windows-x64": "1.1.75"
+    "nuwaxcode-darwin-arm64": "1.1.76",
+    "nuwaxcode-darwin-x64": "1.1.76",
+    "nuwaxcode-linux-arm64": "1.1.76",
+    "nuwaxcode-linux-arm64-musl": "1.1.76",
+    "nuwaxcode-linux-x64": "1.1.76",
+    "nuwaxcode-linux-x64-musl": "1.1.76",
+    "nuwaxcode-windows-x64": "1.1.76"
   }
 }
