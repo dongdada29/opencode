@@ -20,6 +20,7 @@
     "publish": "bun run script/publish.ts",
     "verify:registry": "bun run script/verify-registry-complete.ts",
     "sync:npmmirror": "bash ../../scripts/sync-npmmirror.sh",
+    "sync:npmmirror:check": "bash ../../scripts/sync-npmmirror.sh --check",
     "deploy": "echo 'Deploying application...' && bun run build && echo 'Deployment completed successfully'",
     "update-models": "bun ../../scripts/update-models.ts"
   },

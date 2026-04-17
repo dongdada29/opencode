@@ -12,8 +12,10 @@
 # 发版结束后默认会校验 npm 上 optional 子包是否齐全；若需跳过（例如 registry 延迟）：
 #   SKIP_REGISTRY_VERIFY=1 ./release.sh 1.1.76
 #
-# 发版后若需触发国内 npmmirror 仅同步主包 nuwaxcode（最新上游）：
+# 发版后若需触发国内 npmmirror 同步主包 + 全部 optional 平台子包：
 #   ./scripts/sync-npmmirror.sh
+# 仅检查镜像上是否已有当前 package.json 版本（不发起 PUT）：
+#   ./scripts/sync-npmmirror.sh --check
 
 set -e
 
