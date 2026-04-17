@@ -19,6 +19,7 @@
     "docs": "echo 'Generating documentation...' && find src -name '*.ts' -exec echo 'Processing: {}' \\;",
     "publish": "bun run script/publish.ts",
     "verify:registry": "bun run script/verify-registry-complete.ts",
+    "sync:npmmirror": "bash ../../scripts/sync-npmmirror.sh",
     "deploy": "echo 'Deploying application...' && bun run build && echo 'Deployment completed successfully'",
     "update-models": "bun ../../scripts/update-models.ts"
   },
