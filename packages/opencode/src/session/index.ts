@@ -25,6 +25,7 @@ import { Global } from "@/global"
 
 export namespace Session {
   const log = Log.create({ service: "session" })
+  const Source = z.literal("acp")
 
   const parentTitlePrefix = "New session - "
   const childTitlePrefix = "Child session - "
@@ -45,6 +46,7 @@ export namespace Session {
       slug: z.string(),
       projectID: z.string(),
       directory: z.string(),
+      source: Source.optional(),
       parentID: Identifier.schema("session").optional(),
       summary: z
         .object({
@@ -132,6 +134,7 @@ export namespace Session {
       .object({
         parentID: Identifier.schema("session").optional(),
         title: z.string().optional(),
+        source: Source.optional(),
         permission: Info.shape.permission,
       })
       .optional(),
@@ -140,6 +143,7 @@ export namespace Session {
         parentID: input?.parentID,
         directory: Instance.directory,
         title: input?.title,
+        source: input?.source,
         permission: input?.permission,
       })
     },
@@ -192,6 +196,7 @@ export namespace Session {
   export async function createNext(input: {
     id?: string
     title?: string
+    source?: z.infer<typeof Source>
     parentID?: string
     directory: string
     permission?: PermissionNext.Ruleset
@@ -202,6 +207,7 @@ export namespace Session {
       version: Installation.VERSION,
       projectID: Instance.project.id,
       directory: input.directory,
+      source: input.source,
       parentID: input.parentID,
       title: input.title ?? createDefaultTitle(!!input.parentID),
       permission: input.permission,

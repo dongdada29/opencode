@@ -30,14 +30,13 @@ export class ACPSessionManager {
       model,
       systemPrompt,
     })
+    const createPayload: Parameters<typeof this.sdk.session.create>[0] & { source?: "acp" } = {
+      title: `ACP Session ${crypto.randomUUID()}`,
+      directory: cwd,
+      source: "acp",
+    }
     const session = await this.sdk.session
-      .create(
-        {
-          title: `ACP Session ${crypto.randomUUID()}`,
-          directory: cwd,
-        },
-        { throwOnError: true },
-      )
+      .create(createPayload, { throwOnError: true })
       .then((x) => x.data!)
 
     const sessionId = session.id

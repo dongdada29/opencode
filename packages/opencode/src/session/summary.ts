@@ -76,6 +76,11 @@ export namespace SessionSummary {
 
     const textPart = msgWithParts.parts.find((p) => p.type === "text" && !p.synthetic) as MessageV2.TextPart
     if (textPart && !userMsg.summary?.title) {
+      // ACP sessions are tagged with `source: "acp"`.
+      // Skip per-message title generation for ACP to avoid extra LLM calls.
+      const session = await Session.get(userMsg.sessionID)
+      if (session.source === "acp") return
+
       const agent = await Agent.get("title")
       if (!agent) return
       const stream = await LLM.stream({
