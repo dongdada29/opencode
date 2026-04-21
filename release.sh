@@ -1,9 +1,10 @@
 #!/bin/bash
 
 # Release Workflow Script for NuwaxCode
-# Usage: ./release.sh <new_version> [otp_code]
+# Usage: ./release.sh <new_version> [otp_code|--no-otp]
 # Example: ./release.sh 1.1.52
 # Example with OTP: ./release.sh 1.1.52 123456
+# Example skip OTP prompt: ./release.sh 1.1.52 --no-otp
 #
 # NPM dist-tag (default: latest). Set to e.g. beta to publish without moving latest:
 #   NPM_DIST_TAG=beta ./release.sh 1.1.72
@@ -21,12 +22,20 @@ set -e
 
 NEW_VERSION=$1
 OTP_CODE=$2
+# 支持显式跳过 OTP 交互：
+# - 传第二个参数为 --no-otp 时，不再拼接 --otp，直接把 --no-otp 透传给发布脚本。
+# - 这样可避免在无交互/远程执行时卡在 OTP 输入提示。
+NO_OTP_FLAG=""
+if [ "$OTP_CODE" = "--no-otp" ]; then
+  NO_OTP_FLAG="--no-otp"
+  OTP_CODE=""
+fi
 # 未设置时与历史行为一致：打 latest；设为 beta/next 等则只打该 tag，不挂 latest
 NPM_DIST_TAG="${NPM_DIST_TAG:-latest}"
 
 if [ -z "$NEW_VERSION" ]; then
   echo "Error: Please provide a version number."
-  echo "Usage: ./release.sh <new_version> [otp_code]"
+  echo "Usage: ./release.sh <new_version> [otp_code|--no-otp]"
   echo "Optional: NPM_DIST_TAG=beta ./release.sh <new_version> [otp_code]"
   exit 1
 fi
@@ -79,6 +88,9 @@ fi
 if [ ! -z "$OTP_CODE" ]; then
     PUBLISH_CMD="$PUBLISH_CMD --otp=$OTP_CODE"
     echo "Using provided OTP."
+elif [ ! -z "$NO_OTP_FLAG" ]; then
+    PUBLISH_CMD="$PUBLISH_CMD $NO_OTP_FLAG"
+    echo "Skipping OTP prompt (--no-otp)."
 else
     # If no OTP provided, checking if we should use --no-otp or let it prompt
     # The publish script handles --no-otp if user wants to bypass, or interactive if not provided

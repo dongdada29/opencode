@@ -10,10 +10,18 @@ process.chdir(dir)
 
 const { binaries } = await import("./build.ts")
 
-const otpArg = process.argv.find(arg => arg.startsWith("--otp="))
+// OTP 参数优先级说明：
+// 1) --otp=123456：显式提供 OTP，直接使用，不进入交互。
+// 2) --no-otp：显式声明跳过 OTP，不进入交互。
+// 3) 两者都未提供：进入交互提示，允许人工输入或留空跳过。
+// 这样可以同时支持 CI/自动化场景（无交互）和本地手工发布场景（可交互）。
+const otpArg = process.argv.find((arg) => arg.startsWith("--otp="))
+const skipOtp = process.argv.includes("--no-otp")
 let otp = otpArg ? otpArg.split("=")[1] : null
 
-if (!otp) {
+if (!otp && !skipOtp) {
+  // 仅在既没有显式 OTP、也没有声明跳过 OTP 时，才请求交互输入。
+  // 避免在自动化环境里卡在 stdin。
   const response = await text({
     message: "Enter NPM OTP (required for 2FA, leave empty to skip):",
     placeholder: "123456",
