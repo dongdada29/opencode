@@ -523,10 +523,22 @@ export namespace MCP {
       log.info("starting local mcp", { key, command: mcp.command, cwd, envKeys: Object.keys(env) })
 
       const transport = new StdioClientTransport({
+        stderr: "pipe",
         command: cmd,
         args,
         cwd,
         env,
+      })
+
+      // Capture subprocess stderr for diagnostics (aligned with official opencode)
+      let stderrOutput = ""
+      transport.stderr?.on("data", (chunk: Buffer) => {
+        const text = chunk.toString()
+        stderrOutput += text
+        // Cap accumulated stderr to prevent unbounded memory growth
+        if (stderrOutput.length > 64 * 1024) {
+          stderrOutput = stderrOutput.slice(-64 * 1024)
+        }
       })
 
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
@@ -541,13 +553,19 @@ export namespace MCP {
         status = {
           status: "connected",
         }
+        if (stderrOutput) {
+          log.info("local mcp stderr during startup", { key, stderr: stderrOutput.trim() })
+        }
       } catch (error) {
         log.error("local mcp startup failed", {
           key,
           command: mcp.command,
           cwd,
           error: error instanceof Error ? error.message : String(error),
+          stderr: stderrOutput.trim() || undefined,
         })
+        // Close transport to prevent subprocess leak (aligned with official opencode)
+        await transport.close().catch(() => {})
         status = {
           status: "failed" as const,
           error: error instanceof Error ? error.message : String(error),
