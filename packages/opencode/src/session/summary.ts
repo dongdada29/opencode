@@ -20,6 +20,20 @@ import { Agent } from "@/agent/agent"
 export namespace SessionSummary {
   const log = Log.create({ service: "session.summary" })
 
+  /**
+   * 判断当前会话是否应跳过“按消息生成标题”的 LLM 调用。
+   *
+   * 设计说明：
+   * 1. 标准路径：ACP 会话会带 `source: "acp"`，直接跳过标题 LLM。
+   * 2. 兜底路径：历史/异常链路可能出现 `source` 丢失，但标题仍是 ACP 默认前缀
+   *    （`ACP Session <uuid>`）；此时仍应视为 ACP 会话并跳过，避免额外 LLM 开销。
+   */
+  export function shouldSkipMessageTitleGeneration(session: Session.Info) {
+    if (session.source === "acp") return true
+    if (session.title.startsWith("ACP Session ")) return true
+    return false
+  }
+
   export const summarize = fn(
     z.object({
       sessionID: z.string(),
@@ -76,10 +90,16 @@ export namespace SessionSummary {
 
     const textPart = msgWithParts.parts.find((p) => p.type === "text" && !p.synthetic) as MessageV2.TextPart
     if (textPart && !userMsg.summary?.title) {
-      // ACP sessions are tagged with `source: "acp"`.
-      // Skip per-message title generation for ACP to avoid extra LLM calls.
+      // ACP 场景下不走“按消息生成标题”的 LLM，避免额外 token 和延迟。
       const session = await Session.get(userMsg.sessionID)
-      if (session.source === "acp") return
+      if (shouldSkipMessageTitleGeneration(session)) {
+        log.info("skip message title generation for ACP-like session", {
+          sessionID: session.id,
+          source: session.source ?? "unknown",
+          title: session.title,
+        })
+        return
+      }
 
       const agent = await Agent.get("title")
       if (!agent) return
