@@ -1,78 +1,75 @@
 import path from "path"
-import z from "zod"
-import { Tool } from "./tool"
+import { pathToFileURL } from "url"
+import { Effect, Schema } from "effect"
+import * as Stream from "effect/Stream"
+import { Ripgrep } from "../file/ripgrep"
 import { Skill } from "../skill"
-import { ConfigMarkdown } from "../config/markdown"
-import { PermissionNext } from "../permission/next"
-import { Log } from "../util/log"
+import * as Tool from "./tool"
+import DESCRIPTION from "./skill.txt"
 
-const parameters = z.object({
-  name: z.string().describe("The skill identifier from available_skills (e.g., 'code-review' or 'category/helper')"),
+export const Parameters = Schema.Struct({
+  name: Schema.String.annotate({ description: "The name of the skill from available_skills" }),
 })
 
-export const SkillTool = Tool.define("skill", async (ctx) => {
-  const log = Log.create({ service: "tool:skill" })
-  const skills = await Skill.all()
+export const SkillTool = Tool.define(
+  "skill",
+  Effect.gen(function* () {
+    const skill = yield* Skill.Service
+    const rg = yield* Ripgrep.Service
 
-  // Filter skills by agent permissions if agent provided
-  const agent = ctx?.agent
-  const accessibleSkills = agent
-    ? skills.filter((skill) => {
-      const rule = PermissionNext.evaluate("skill", skill.name, agent.permission)
-      return rule.action !== "deny"
-    })
-    : skills
+    return {
+      description: DESCRIPTION,
+      parameters: Parameters,
+      execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
+        Effect.gen(function* () {
+          const info = yield* skill.get(params.name)
+          if (!info) {
+            const all = yield* skill.all()
+            const available = all.map((item) => item.name).join(", ")
+            throw new Error(`Skill "${params.name}" not found. Available skills: ${available || "none"}`)
+          }
 
-  const description =
-    accessibleSkills.length === 0
-      ? "Load a skill to get detailed instructions for a specific task. No skills are currently available."
-      : [
-        "Load a skill to get detailed instructions for a specific task.",
-        "Skills provide specialized knowledge and step-by-step guidance.",
-        "Use this when a task matches an available skill's description.",
-        "<available_skills>",
-        ...accessibleSkills.flatMap((skill) => [
-          `  <skill>`,
-          `    <name>${skill.name}</name>`,
-          `    <description>${skill.description}</description>`,
-          `  </skill>`,
-        ]),
-        "</available_skills>",
-      ].join(" ")
+          yield* ctx.ask({
+            permission: "skill",
+            patterns: [params.name],
+            always: [params.name],
+            metadata: {},
+          })
 
-  return {
-    description,
-    parameters,
-    async execute(params: z.infer<typeof parameters>, ctx) {
-      const skill = await Skill.get(params.name)
+          const dir = path.dirname(info.location)
+          const base = pathToFileURL(dir).href
+          const limit = 10
+          const files = yield* rg.files({ cwd: dir, follow: false, hidden: true, signal: ctx.abort }).pipe(
+            Stream.filter((file) => !file.includes("SKILL.md")),
+            Stream.map((file) => path.resolve(dir, file)),
+            Stream.take(limit),
+            Stream.runCollect,
+            Effect.map((chunk) => [...chunk].map((file) => `<file>${file}</file>`).join("\n")),
+          )
 
-      if (!skill) {
-        const available = await Skill.all().then((x) => Object.keys(x).join(", "))
-        throw new Error(`Skill "${params.name}" not found. Available skills: ${available || "none"}`)
-      }
-
-      await ctx.ask({
-        permission: "skill",
-        patterns: [params.name],
-        always: [params.name],
-        metadata: {},
-      })
-      // Load and parse skill content
-      const parsed = await ConfigMarkdown.parse(skill.location)
-      const dir = path.dirname(skill.location)
-      log.info("skill.execute", { name: skill.name, location: skill.location, dir })
-
-      // Format output similar to plugin pattern
-      const output = [`## Skill: ${skill.name}`, "", `**Base directory**: ${dir}`, "", parsed.content.trim()].join("\n")
-
-      return {
-        title: `Loaded skill: ${skill.name}`,
-        output,
-        metadata: {
-          name: skill.name,
-          dir,
-        },
-      }
-    },
-  }
-})
+          return {
+            title: `Loaded skill: ${info.name}`,
+            output: [
+              `<skill_content name="${info.name}">`,
+              `# Skill: ${info.name}`,
+              "",
+              info.content.trim(),
+              "",
+              `Base directory for this skill: ${base}`,
+              "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",
+              "Note: file list is sampled.",
+              "",
+              "<skill_files>",
+              files,
+              "</skill_files>",
+              "</skill_content>",
+            ].join("\n"),
+            metadata: {
+              name: info.name,
+              dir,
+            },
+          }
+        }).pipe(Effect.orDie),
+    }
+  }),
+)

@@ -1,39 +1,42 @@
 import { Plugin } from "../plugin"
-import { Share } from "../share/share"
 import { Format } from "../format"
 import { LSP } from "../lsp"
-import { FileWatcher } from "../file/watcher"
 import { File } from "../file"
-import { Project } from "./project"
+import { Snapshot } from "../snapshot"
+import * as Project from "./project"
+import * as Vcs from "./vcs"
 import { Bus } from "../bus"
 import { Command } from "../command"
 import { Instance } from "./instance"
-import { Vcs } from "./vcs"
-import { Log } from "@/util/log"
-import { ShareNext } from "@/share/share-next"
-import { Snapshot } from "../snapshot"
-import { Truncate } from "../tool/truncation"
+import { Log } from "@/util"
+import { FileWatcher } from "@/file/watcher"
+import { ShareNext } from "@/share"
+import * as Effect from "effect/Effect"
+import { Config } from "@/config"
 
-export async function InstanceBootstrap() {
+export const InstanceBootstrap = Effect.gen(function* () {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
-  await Plugin.init()
+  // everything depends on config so eager load it for nice traces
+  yield* Config.Service.use((svc) => svc.get())
+  // Plugin can mutate config so it has to be initialized before anything else.
+  yield* Plugin.Service.use((svc) => svc.init())
+  yield* Effect.all(
+    [
+      LSP.Service,
+      ShareNext.Service,
+      Format.Service,
+      File.Service,
+      FileWatcher.Service,
+      Vcs.Service,
+      Snapshot.Service,
+    ].map((s) => Effect.forkDetach(s.use((i) => i.init()))),
+  ).pipe(Effect.withSpan("InstanceBootstrap.init"))
 
-  // Run independent service inits in parallel
-  await Promise.all([
-    LSP.init().catch((err) => Log.Default.error("LSP.init failed", { error: err })),
-    Promise.resolve().then(() => Share.init()),
-    Promise.resolve().then(() => ShareNext.init()),
-    Promise.resolve().then(() => Format.init()),
-    Promise.resolve().then(() => FileWatcher.init()),
-    Promise.resolve().then(() => File.init()),
-    Promise.resolve().then(() => Vcs.init()),
-    Promise.resolve().then(() => Snapshot.init()),
-    Promise.resolve().then(() => Truncate.init()),
-  ])
-
-  Bus.subscribe(Command.Event.Executed, async (payload) => {
-    if (payload.properties.name === Command.Default.INIT) {
-      await Project.setInitialized(Instance.project.id)
-    }
-  })
-}
+  yield* Bus.Service.use((svc) =>
+    svc.subscribeCallback(Command.Event.Executed, async (payload) => {
+      if (payload.properties.name === Command.Default.INIT) {
+        Project.setInitialized(Instance.project.id)
+      }
+    }),
+  )
+}).pipe(Effect.withSpan("InstanceBootstrap"))

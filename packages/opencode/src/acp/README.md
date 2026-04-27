@@ -44,6 +44,16 @@ opencode acp
 opencode acp --cwd /path/to/project
 ```
 
+### Question Tool Opt-In
+
+ACP excludes `QuestionTool` by default.
+
+```bash
+OPENCODE_ENABLE_QUESTION_TOOL=1 opencode acp
+```
+
+Enable this only for ACP clients that support interactive question prompts.
+
 ### Programmatic
 
 ```typescript
@@ -59,8 +69,8 @@ Add to your Zed configuration (`~/.config/zed/settings.json`):
 ```json
 {
   "agent_servers": {
-    "NuwaxCode": {
-      "command": "nuwaxcode",
+    "OpenCode": {
+      "command": "opencode",
       "args": ["acp"]
     }
   }
@@ -148,7 +158,7 @@ Each component has a single responsibility:
 
 This makes the codebase maintainable and testable.
 
-### Mapping to NuwaxCode
+### Mapping to OpenCode
 
 ACP sessions map cleanly to opencode's internal session model:
 

@@ -1,12 +1,13 @@
 import { Billing } from "../src/billing.js"
-import { and, Database, eq, isNull, sql } from "../src/drizzle/index.js"
+import { and, Database, eq, isNull } from "../src/drizzle/index.js"
 import { UserTable } from "../src/schema/user.sql.js"
-import { BillingTable, PaymentTable, SubscriptionTable } from "../src/schema/billing.sql.js"
+import { BillingTable, SubscriptionTable } from "../src/schema/billing.sql.js"
 import { Identifier } from "../src/identifier.js"
-import { centsToMicroCents } from "../src/util/price.js"
 import { AuthTable } from "../src/schema/auth.sql.js"
+import { BlackData } from "../src/black.js"
 
 const plan = "200"
+const couponID = "JAIr0Pe1"
 const workspaceID = process.argv[2]
 const seats = parseInt(process.argv[3])
 
@@ -61,16 +62,18 @@ const customerID =
       .then((customer) => customer.id))())
 console.log(`Customer ID: ${customerID}`)
 
-const couponID = "JAIr0Pe1"
 const subscription = await Billing.stripe().subscriptions.create({
   customer: customerID!,
   items: [
     {
-      price: `price_1SmfyI2StuRr0lbXovxJNeZn`,
+      price: BlackData.planToPriceID({ plan }),
       discounts: [{ coupon: couponID }],
-      quantity: 2,
+      quantity: seats,
     },
   ],
+  metadata: {
+    workspaceID,
+  },
 })
 console.log(`Subscription ID: ${subscription.id}`)
 
