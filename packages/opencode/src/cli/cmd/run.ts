@@ -9,7 +9,7 @@ import { EOL } from "os"
 import { Filesystem } from "../../util"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { Server } from "../../server/server"
-import { Provider } from "../../provider"
+import { ModelsDev, Provider } from "../../provider"
 import { Agent } from "../../agent/agent"
 import { Permission } from "../../permission"
 import { Tool } from "../../tool"
@@ -628,6 +628,14 @@ export const RunCommand = cmd({
       if (!sessionID) {
         UI.error("Session not found")
         process.exit(1)
+      }
+      if (args.format !== "json") {
+        const info = ModelsDev.sourceInfo()
+        UI.println(
+          UI.Style.TEXT_DIM +
+            `~ models source: ${info.source} (${info.modelsURL})` +
+            UI.Style.TEXT_NORMAL,
+        )
       }
       await share(sdk, sessionID)
 

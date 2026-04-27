@@ -37,7 +37,7 @@ import { Filesystem } from "../util"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { ACPSessionManager } from "./session"
 import type { ACPConfig } from "./types"
-import { Provider } from "../provider"
+import { ModelsDev, Provider } from "../provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { Agent as AgentModule } from "../agent/agent"
 import { AppRuntime } from "@/effect/app-runtime"
@@ -57,6 +57,10 @@ type ModelOption = { modelId: string; name: string }
 const decodeTodos = Schema.decodeUnknownResult(Schema.fromJsonString(Schema.Array(Todo.Info)))
 
 const DEFAULT_VARIANT_VALUE = "default"
+// Cache resolved default model per directory to avoid repeated provider/config IO
+// during short-lived ACP request bursts (session init, reload, model metadata refresh).
+const MODEL_CACHE_TTL = 30_000
+const modelCache = new Map<string, { model: { providerID: ProviderID; modelID: ModelID }; expires: number }>()
 
 const log = Log.create({ service: "acp-agent" })
 
@@ -1175,6 +1179,17 @@ export class Agent implements ACPAgent {
     const directory = params.cwd
     const model = await defaultModel(this.config, directory)
     const sessionId = params.sessionId
+    const modelsSource = ModelsDev.sourceInfo()
+    log.info("loadSessionMode.model_source", {
+      sessionId,
+      directory,
+      providerID: model.providerID,
+      modelID: model.modelID,
+      source: modelsSource.source,
+      modelsURL: modelsSource.modelsURL,
+      fetchDisabled: modelsSource.fetchDisabled,
+      cachePath: modelsSource.cachePath,
+    })
 
     const providers = await this.sdk.config.providers({ directory }).then((x) => x.data!.providers)
     const entries = sortProvidersByName(providers)
@@ -1592,11 +1607,31 @@ function toLocations(toolName: string, input: Record<string, any>): { path: stri
 }
 
 async function defaultModel(config: ACPConfig, cwd?: string): Promise<{ providerID: ProviderID; modelID: ModelID }> {
+  const startedAt = Date.now()
   const sdk = config.sdk
   const configured = config.defaultModel
-  if (configured) return configured
+  if (configured) {
+    log.info("defaultModel.resolve", {
+      source: "config.defaultModel",
+      providerID: configured.providerID,
+      modelID: configured.modelID,
+      totalMs: Date.now() - startedAt,
+    })
+    return configured
+  }
 
   const directory = cwd ?? process.cwd()
+  const cached = modelCache.get(directory)
+  if (cached && cached.expires > Date.now()) {
+    log.info("defaultModel.resolve", {
+      source: "memory_cache",
+      directory,
+      providerID: cached.model.providerID,
+      modelID: cached.model.modelID,
+      totalMs: Date.now() - startedAt,
+    })
+    return cached.model
+  }
 
   const specified = await sdk.config
     .get({ directory }, { throwOnError: true })
@@ -1620,37 +1655,103 @@ async function defaultModel(config: ACPConfig, cwd?: string): Promise<{ provider
 
   if (specified && providers.length) {
     const provider = providers.find((p) => p.id === specified.providerID)
-    if (provider && provider.models[specified.modelID]) return specified
+    if (provider && provider.models[specified.modelID]) {
+      modelCache.set(directory, { model: specified, expires: Date.now() + MODEL_CACHE_TTL })
+      log.info("defaultModel.resolve", {
+        source: "user_config_validated",
+        directory,
+        providerID: specified.providerID,
+        modelID: specified.modelID,
+        totalMs: Date.now() - startedAt,
+      })
+      return specified
+    }
   }
 
-  if (specified && !providers.length) return specified
+  if (specified && !providers.length) {
+    modelCache.set(directory, { model: specified, expires: Date.now() + MODEL_CACHE_TTL })
+    log.info("defaultModel.resolve", {
+      source: "user_config_no_providers",
+      directory,
+      providerID: specified.providerID,
+      modelID: specified.modelID,
+      totalMs: Date.now() - startedAt,
+    })
+    return specified
+  }
 
   const opencodeProvider = providers.find((p) => p.id === "opencode")
   if (opencodeProvider) {
     if (opencodeProvider.models["big-pickle"]) {
-      return { providerID: ProviderID.opencode, modelID: ModelID.make("big-pickle") }
+      const result = { providerID: ProviderID.opencode, modelID: ModelID.make("big-pickle") }
+      modelCache.set(directory, { model: result, expires: Date.now() + MODEL_CACHE_TTL })
+      log.info("defaultModel.resolve", {
+        source: "opencode_big_pickle",
+        directory,
+        providerID: result.providerID,
+        modelID: result.modelID,
+        totalMs: Date.now() - startedAt,
+      })
+      return result
     }
     const [best] = Provider.sort(Object.values(opencodeProvider.models))
     if (best) {
-      return {
+      const result = {
         providerID: ProviderID.make(best.providerID),
         modelID: ModelID.make(best.id),
       }
+      modelCache.set(directory, { model: result, expires: Date.now() + MODEL_CACHE_TTL })
+      log.info("defaultModel.resolve", {
+        source: "opencode_best",
+        directory,
+        providerID: result.providerID,
+        modelID: result.modelID,
+        totalMs: Date.now() - startedAt,
+      })
+      return result
     }
   }
 
   const models = providers.flatMap((p) => Object.values(p.models))
   const [best] = Provider.sort(models)
   if (best) {
-    return {
+    const result = {
       providerID: ProviderID.make(best.providerID),
       modelID: ModelID.make(best.id),
     }
+    modelCache.set(directory, { model: result, expires: Date.now() + MODEL_CACHE_TTL })
+    log.info("defaultModel.resolve", {
+      source: "provider_sort_best",
+      directory,
+      providerID: result.providerID,
+      modelID: result.modelID,
+      totalMs: Date.now() - startedAt,
+    })
+    return result
   }
 
-  if (specified) return specified
+  if (specified) {
+    modelCache.set(directory, { model: specified, expires: Date.now() + MODEL_CACHE_TTL })
+    log.info("defaultModel.resolve", {
+      source: "user_config_fallback",
+      directory,
+      providerID: specified.providerID,
+      modelID: specified.modelID,
+      totalMs: Date.now() - startedAt,
+    })
+    return specified
+  }
 
-  return { providerID: ProviderID.opencode, modelID: ModelID.make("big-pickle") }
+  const fallback = { providerID: ProviderID.opencode, modelID: ModelID.make("big-pickle") }
+  modelCache.set(directory, { model: fallback, expires: Date.now() + MODEL_CACHE_TTL })
+  log.info("defaultModel.resolve", {
+    source: "hard_fallback",
+    directory,
+    providerID: fallback.providerID,
+    modelID: fallback.modelID,
+    totalMs: Date.now() - startedAt,
+  })
+  return fallback
 }
 
 function parseUri(

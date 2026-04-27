@@ -33,6 +33,18 @@ export const ModelsCommand = cmd({
       await ModelsDev.refresh(true)
       UI.println(UI.Style.TEXT_SUCCESS_BOLD + "Models cache refreshed" + UI.Style.TEXT_NORMAL)
     }
+    if (args.verbose) {
+      const info = ModelsDev.sourceInfo()
+      UI.println(
+        [
+          UI.Style.TEXT_DIM + "models source:" + UI.Style.TEXT_NORMAL + ` ${info.source}`,
+          UI.Style.TEXT_DIM + "models cache:" + UI.Style.TEXT_NORMAL + ` ${info.cachePath}`,
+          UI.Style.TEXT_DIM + "models url:" + UI.Style.TEXT_NORMAL + ` ${info.modelsURL}`,
+          UI.Style.TEXT_DIM + "fetch disabled:" + UI.Style.TEXT_NORMAL + ` ${String(info.fetchDisabled)}`,
+        ].join(EOL),
+      )
+      UI.println("")
+    }
 
     await Instance.provide({
       directory: process.cwd(),
