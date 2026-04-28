@@ -59,6 +59,15 @@ jobs:
       - name: List dist directories
         run: ls -la packages/opencode/dist/
 
+      - name: Copy bundled models.json
+        run: |
+          cd packages/opencode
+          for dir in dist/*/; do
+            mkdir -p "${dir}bin/assets"
+            cp assets/models.json "${dir}bin/assets/"
+            echo "Copied models.json to ${dir}bin/assets/"
+          done
+
       - name: Create archives
         run: |
           cd packages/opencode
