@@ -580,6 +580,12 @@ export const layer = Layer.effect(
           yield* mergePluginOrigins(dir, list)
         }
 
+        // OPENCODE_MODEL env var overrides model (highest priority)
+        if (process.env.OPENCODE_MODEL) {
+          result.model = process.env.OPENCODE_MODEL
+          log.debug("loaded model overrides from OPENCODE_MODEL env var", { model: result.model })
+        }
+
         if (process.env.OPENCODE_CONFIG_CONTENT) {
           const source = "OPENCODE_CONFIG_CONTENT"
           const next = yield* loadConfig(process.env.OPENCODE_CONFIG_CONTENT, {

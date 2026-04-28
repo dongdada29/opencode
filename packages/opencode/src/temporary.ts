@@ -1,11 +1,13 @@
 import yargs from "yargs"
 import { TuiThreadCommand } from "./cli/cmd/tui/thread"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { Installation } from "./installation"
 import { hideBin } from "yargs/helpers"
 import { Log } from "./node"
 
 Log.init({
   print: false,
+  dev: Installation.isLocal(),
 })
 
 const cli = yargs(hideBin(process.argv))

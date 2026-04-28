@@ -3,6 +3,7 @@ import { bootstrap } from "../bootstrap"
 import { cmd } from "./cmd"
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk"
 import { ACP } from "@/acp/agent"
+import { Provider } from "@/provider"
 import { Server } from "@/server/server"
 import { createOpencodeClient } from "@opencode-ai/sdk/v2"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
@@ -55,8 +56,10 @@ export const AcpCommand = cmd({
       const stream = ndJsonStream(input, output)
       const agent = await ACP.init({ sdk })
 
+      const modelEnv = process.env.OPENCODE_MODEL
+      const defaultModel = modelEnv ? Provider.parseModel(modelEnv) : undefined
       new AgentSideConnection((conn) => {
-        return agent.create(conn, { sdk })
+        return agent.create(conn, { sdk, defaultModel })
       }, stream)
 
       log.info("setup connection")
