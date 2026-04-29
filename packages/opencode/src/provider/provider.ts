@@ -1365,7 +1365,28 @@ const layer: Layer.Layer<
           if (disabled.has(providerID)) continue
           const data = database[providerID]
           if (!data) {
-            log.error("Provider does not exist in model list " + providerID)
+            // Generic providers (openai-compatible, anthropic-compatible, etc.) may
+            // not be in the bundled models.json but can still autoload from env vars.
+            // Call the custom loader with a minimal Info to check autoload eligibility.
+            const minimal: Info = {
+              id: providerID,
+              name: String(providerID),
+              source: "custom",
+              env: [],
+              options: {},
+              models: {},
+            }
+            const result = yield* fn(minimal)
+            if (result?.autoload) {
+              if (result.getModel) modelLoaders[providerID] = result.getModel
+              if (result.vars) varsLoaders[providerID] = result.vars
+              if (result.discoverModels) discoveryLoaders[providerID] = result.discoverModels
+              const opts = result.options ?? {}
+              mergeProvider(providerID, {
+                ...minimal,
+                options: opts,
+              })
+            }
             continue
           }
           const result = yield* fn(data)
@@ -1468,7 +1489,7 @@ const layer: Layer.Layer<
             }
           }
 
-          if (Object.keys(provider.models).length === 0) {
+          if (Object.keys(provider.models).length === 0 && !modelLoaders[providerID]) {
             delete providers[providerID]
             continue
           }
