@@ -1664,6 +1664,37 @@ const layer: Layer.Layer<
 
       const info = provider.models[modelID]
       if (!info) {
+        if (s.modelLoaders[providerID] && Object.keys(provider.models).length === 0) {
+          const firstModel = Object.values(provider.models)[0]
+          const dyn: Model = {
+            id: ModelID.make(modelID),
+            providerID,
+            name: modelID,
+            api: {
+              id: modelID,
+              url: provider.options["baseURL"] ?? firstModel?.api.url ?? "",
+              npm: firstModel?.api.npm ?? "@ai-sdk/openai-compatible",
+            },
+            status: "active",
+            headers: {},
+            options: {},
+            cost: firstModel?.cost ?? { input: 0, output: 0, cache: { read: 0, write: 0 } },
+            limit: firstModel?.limit ?? { context: 0, output: 0 },
+            capabilities: firstModel?.capabilities ?? {
+              temperature: false,
+              reasoning: false,
+              attachment: false,
+              toolcall: true,
+              input: { text: true, audio: false, image: false, video: false, pdf: false },
+              output: { text: true, audio: false, image: false, video: false, pdf: false },
+              interleaved: false,
+            },
+            release_date: "",
+            variants: {},
+          }
+          provider.models[modelID] = dyn
+          return dyn
+        }
         const available = Object.keys(provider.models)
         const matches = fuzzysort.go(modelID, available, { limit: 3, threshold: -10000 })
         throw new ModelNotFoundError({ providerID, modelID, suggestions: matches.map((m) => m.target) })
