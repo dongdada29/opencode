@@ -77,12 +77,27 @@ read -p "Press Enter to continue if changelog is updated (or Ctrl+C to abort)...
 echo "🚀 Publishing to NPM (dist-tag: ${NPM_DIST_TAG})..."
 cd packages/opencode
 
+# 清理上一次发布遗留的聚合包目录（dist/nuwaxcode）。
+# publish.ts 会先扫描 dist/*/package.json 再重写该目录；
+# 若此目录残留旧的 nuwaxcode-ai package.json，会被误当作二进制子包参与发布，导致 ENOENT。
+if [ -d "./dist/nuwaxcode" ]; then
+  echo "🧹 Cleaning stale ./dist/nuwaxcode before publish..."
+  rm -rf "./dist/nuwaxcode"
+fi
+
 if [ "$NPM_DIST_TAG" = "latest" ]; then
-  PUBLISH_CMD="bun run publish --latest"
+  # 直接调用发布脚本，避免依赖 package.json 里必须存在 "publish" 别名。
+  # 这样即使 scripts 结构调整（比如移除 publish alias），release 仍可执行。
+  # 显式设置正式发布上下文，避免 Script 根据当前 git 分支误判为 preview/channel 发布。
+  export OPENCODE_CHANNEL="latest"
+  export OPENCODE_VERSION="$NEW_VERSION"
+  export OPENCODE_RELEASE="1"
+  PUBLISH_CMD="bun run script/publish.ts --latest"
 else
   # packages/opencode/script/publish.ts：无 --latest 时仅用 Script.channel，不添加 latest
   export OPENCODE_CHANNEL="$NPM_DIST_TAG"
-  PUBLISH_CMD="bun run publish"
+  # 同上：直接执行脚本，减少对 package.json scripts 映射的耦合。
+  PUBLISH_CMD="bun run script/publish.ts"
 fi
 
 if [ ! -z "$OTP_CODE" ]; then

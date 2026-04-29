@@ -65,9 +65,16 @@ const image = "ghcr.io/anomalyco/opencode"
 const platforms = "linux/amd64,linux/arm64"
 const tags = [`${image}:${version}`, `${image}:${Script.channel}`]
 const tagFlags = tags.flatMap((t) => ["-t", t])
+// 本地/紧急发版场景下，允许只执行 npm 发布，跳过 docker/aur/homebrew 这类
+// 依赖外部守护进程或凭据的后续步骤，避免因为环境问题阻塞 npm 交付。
+const skipDockerPublish = process.env.SKIP_DOCKER_PUBLISH === "1"
 
 // registries
 if (!Script.preview) {
+  if (skipDockerPublish) {
+    console.log("SKIP_DOCKER_PUBLISH=1，跳过 docker 与后续镜像/仓库发布步骤。")
+    process.exit(0)
+  }
   await $`docker buildx build --platform ${platforms} ${tagFlags} --push .`
   // Calculate SHA values
   const arm64Sha = await $`sha256sum ./dist/opencode-linux-arm64.tar.gz | cut -d' ' -f1`.text().then((x) => x.trim())
