@@ -45,6 +45,8 @@ const version = Script.version
 
 await $`mkdir -p ./dist/${pkg.name}`
 await $`cp -r ./bin ./dist/${pkg.name}/bin`
+// 始终提供实体入口 bin/nuwaxcode，避免依赖软链或不存在的文件映射。
+await $`cp ./dist/${pkg.name}/bin/opencode ./dist/${pkg.name}/bin/${pkg.name}`
 await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 await Bun.file(`./dist/${pkg.name}/LICENSE`).write(await Bun.file("../../LICENSE").text())
 
