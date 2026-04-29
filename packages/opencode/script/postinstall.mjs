@@ -49,23 +49,36 @@ function detectPlatformAndArch() {
 
 function findBinary() {
   const { platform, arch } = detectPlatformAndArch()
-  const packageName = `opencode-${platform}-${arch}`
   const binaryName = platform === "windows" ? "opencode.exe" : "opencode"
+  // 包名历史上经历过从 opencode-* 到 nuwaxcode-* 的迁移。
+  // 为了同时兼容：
+  // 1) 新版本主包（optionalDependencies 指向 nuwaxcode-*）
+  // 2) 旧版本或缓存环境（仍可能只安装了 opencode-*）
+  // 这里按“新优先、旧兜底”的顺序尝试解析平台包。
+  const packageCandidates = [`nuwaxcode-${platform}-${arch}`, `opencode-${platform}-${arch}`]
 
-  try {
-    // Use require.resolve to find the package
-    const packageJsonPath = require.resolve(`${packageName}/package.json`)
-    const packageDir = path.dirname(packageJsonPath)
-    const binaryPath = path.join(packageDir, "bin", binaryName)
+  let lastError = null
+  for (const packageName of packageCandidates) {
+    try {
+      // Use require.resolve to find the package
+      const packageJsonPath = require.resolve(`${packageName}/package.json`)
+      const packageDir = path.dirname(packageJsonPath)
+      const binaryPath = path.join(packageDir, "bin", binaryName)
 
-    if (!fs.existsSync(binaryPath)) {
-      throw new Error(`Binary not found at ${binaryPath}`)
+      if (!fs.existsSync(binaryPath)) {
+        throw new Error(`Binary not found at ${binaryPath}`)
+      }
+
+      return { binaryPath, binaryName }
+    } catch (error) {
+      lastError = error
     }
-
-    return { binaryPath, binaryName }
-  } catch (error) {
-    throw new Error(`Could not find package ${packageName}: ${error.message}`, { cause: error })
   }
+
+  throw new Error(
+    `Could not find platform package for ${platform}-${arch}. Tried: ${packageCandidates.join(", ")}. Last error: ${lastError?.message}`,
+    { cause: lastError },
+  )
 }
 
 async function main() {

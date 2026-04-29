@@ -29,7 +29,9 @@ for (const filepath of new Bun.Glob("*/package.json").scanSync({ cwd: "./dist" }
   binaries[pkg.name] = pkg.version
 }
 console.log("binaries", binaries)
-const version = Object.values(binaries)[0]
+// 主包版本应由发布上下文（Script.version）决定，而不是被 dist 二进制版本反向驱动。
+// 这样当仅修复 JS/postinstall 逻辑时，可以发布新的主包版本并继续复用已发布的二进制包版本。
+const version = Script.version
 
 await $`mkdir -p ./dist/${pkg.name}`
 await $`cp -r ./bin ./dist/${pkg.name}/bin`
@@ -39,7 +41,9 @@ await Bun.file(`./dist/${pkg.name}/LICENSE`).write(await Bun.file("../../LICENSE
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
   JSON.stringify(
     {
-      name: pkg.name + "-ai",
+      // 发布主聚合包（nuwaxcode），保持与历史发版行为一致。
+      // optionalDependencies 继续引用各平台二进制子包（nuwaxcode-*）。
+      name: pkg.name,
       bin: {
         [pkg.name]: `./bin/${pkg.name}`,
       },
@@ -59,7 +63,7 @@ const tasks = Object.entries(binaries).map(async ([name]) => {
   await publish(`./dist/${name}`, name, binaries[name])
 })
 await Promise.all(tasks)
-await publish(`./dist/${pkg.name}`, `${pkg.name}-ai`, version)
+await publish(`./dist/${pkg.name}`, `${pkg.name}`, version)
 
 const image = "ghcr.io/anomalyco/opencode"
 const platforms = "linux/amd64,linux/arm64"
