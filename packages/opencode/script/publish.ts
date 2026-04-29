@@ -2,63 +2,52 @@
 import { $ } from "bun"
 import pkg from "../package.json"
 import { Script } from "@opencode-ai/script"
-import { isCancel, text } from "@clack/prompts"
 import { fileURLToPath } from "url"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
-const { binaries } = await import("./build.ts")
-
-// OTP 参数优先级说明：
-// 1) --otp=123456：显式提供 OTP，直接使用，不进入交互。
-// 2) --no-otp：显式声明跳过 OTP，不进入交互。
-// 3) 两者都未提供：进入交互提示，允许人工输入或留空跳过。
-// 这样可以同时支持 CI/自动化场景（无交互）和本地手工发布场景（可交互）。
-const otpArg = process.argv.find((arg) => arg.startsWith("--otp="))
-const skipOtp = process.argv.includes("--no-otp")
-let otp = otpArg ? otpArg.split("=")[1] : null
-
-if (!otp && !skipOtp) {
-  // 仅在既没有显式 OTP、也没有声明跳过 OTP 时，才请求交互输入。
-  // 避免在自动化环境里卡在 stdin。
-  const response = await text({
-    message: "Enter NPM OTP (required for 2FA, leave empty to skip):",
-    placeholder: "123456",
-  })
-
-  if (isCancel(response)) {
-    process.exit(0)
-  }
-
-  if (response) {
-    otp = response as string
-  }
+async function published(name: string, version: string) {
+  return (await $`npm view ${name}@${version} version`.nothrow()).exitCode === 0
 }
 
-const otpFlags = otp ? ["--otp", otp] : []
-
-{
-  const name = `${pkg.name}-${process.platform}-${process.arch}`
-  console.log(`smoke test: running dist/${name}/bin/nuwaxcode --version`)
-  await $`./dist/${name}/bin/nuwaxcode --version`
+async function publish(dir: string, name: string, version: string) {
+  // GitHub artifact downloads can drop the executable bit, and Docker uses the
+  // unpacked dist binaries directly rather than the published tarball.
+  if (process.platform !== "win32") await $`chmod -R 755 .`.cwd(dir)
+  if (await published(name, version)) {
+    console.log(`already published ${name}@${version}`)
+    return
+  }
+  await $`bun pm pack`.cwd(dir)
+  await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(dir)
 }
+
+const binaries: Record<string, string> = {}
+for (const filepath of new Bun.Glob("*/package.json").scanSync({ cwd: "./dist" })) {
+  const pkg = await Bun.file(`./dist/${filepath}`).json()
+  binaries[pkg.name] = pkg.version
+}
+console.log("binaries", binaries)
+const version = Object.values(binaries)[0]
 
 await $`mkdir -p ./dist/${pkg.name}`
 await $`cp -r ./bin ./dist/${pkg.name}/bin`
 await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
+await Bun.file(`./dist/${pkg.name}/LICENSE`).write(await Bun.file("../../LICENSE").text())
 
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
   JSON.stringify(
     {
-      name: pkg.name,
+      name: pkg.name + "-ai",
       bin: {
         [pkg.name]: `./bin/${pkg.name}`,
       },
       scripts: {
         postinstall: "bun ./postinstall.mjs || node ./postinstall.mjs",
       },
-      version: pkg.version,
+      version: version,
+      license: pkg.license,
       optionalDependencies: binaries,
     },
     null,
@@ -66,54 +55,142 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
   ),
 )
 
-const isLatest = process.argv.includes("--latest")
-const tags = [Script.channel]
-if (isLatest) {
-  tags.push("latest")
-}
-
-// 所有带二进制文件的子包必须先成功发布到 npm，再发布主包 `nuwaxcode`。
-// 若子包发布失败却被忽略，主包仍会带上 optionalDependencies@当前版本，而 registry 上
-// 没有对应 tarball 时，用户执行 `npm i -g nuwaxcode` 时 optional 安装会静默失败，
-// postinstall 随后报错：Cannot find module 'nuwaxcode-linux-x64/package.json'。
 const tasks = Object.entries(binaries).map(async ([name]) => {
-  if (process.platform !== "win32") {
-    await $`chmod -R 755 .`.cwd(`./dist/${name}`)
-  }
-  await $`bun pm pack`.cwd(`./dist/${name}`)
-
-  const primaryTag = tags[0]
-  await $`npm publish *.tgz --access public --tag ${primaryTag} ${otpFlags}`.cwd(`./dist/${name}`)
-
-  for (const tag of tags.slice(1)) {
-    await $`npm dist-tag add ${name}@${pkg.version} ${tag} ${otpFlags}`
-  }
+  await publish(`./dist/${name}`, name, binaries[name])
 })
 await Promise.all(tasks)
+await publish(`./dist/${pkg.name}`, `${pkg.name}-ai`, version)
 
-{
-  await $`cd ./dist/${pkg.name} && bun pm pack`
-  const primaryTag = tags[0]
-  await $`npm publish *.tgz --access public --tag ${primaryTag} ${otpFlags}`.cwd(`./dist/${pkg.name}`)
+const image = "ghcr.io/anomalyco/opencode"
+const platforms = "linux/amd64,linux/arm64"
+const tags = [`${image}:${version}`, `${image}:${Script.channel}`]
+const tagFlags = tags.flatMap((t) => ["-t", t])
 
-  for (const tag of tags.slice(1)) {
-    await $`npm dist-tag add ${pkg.name}@${pkg.version} ${tag} ${otpFlags}`
-  }
-}
-
+// registries
 if (!Script.preview) {
-  // Create archives for GitHub release
-  for (const key of Object.keys(binaries)) {
-    if (key.includes("linux")) {
-      await $`tar -czf ../../${key}.tar.gz *`.cwd(`dist/${key}/bin`)
-    } else {
-      await $`zip -r ../../${key}.zip *`.cwd(`dist/${key}/bin`)
+  await $`docker buildx build --platform ${platforms} ${tagFlags} --push .`
+  // Calculate SHA values
+  const arm64Sha = await $`sha256sum ./dist/opencode-linux-arm64.tar.gz | cut -d' ' -f1`.text().then((x) => x.trim())
+  const x64Sha = await $`sha256sum ./dist/opencode-linux-x64.tar.gz | cut -d' ' -f1`.text().then((x) => x.trim())
+  const macX64Sha = await $`sha256sum ./dist/opencode-darwin-x64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+  const macArm64Sha = await $`sha256sum ./dist/opencode-darwin-arm64.zip | cut -d' ' -f1`.text().then((x) => x.trim())
+
+  const [pkgver, _subver = ""] = Script.version.split(/(-.*)/, 2)
+
+  // arch
+  const binaryPkgbuild = [
+    "# Maintainer: dax",
+    "# Maintainer: adam",
+    "",
+    "pkgname='opencode-bin'",
+    `pkgver=${pkgver}`,
+    `_subver=${_subver}`,
+    "options=('!debug' '!strip')",
+    "pkgrel=1",
+    "pkgdesc='The AI coding agent built for the terminal.'",
+    "url='https://github.com/anomalyco/opencode'",
+    "arch=('aarch64' 'x86_64')",
+    "license=('MIT')",
+    "provides=('opencode')",
+    "conflicts=('opencode')",
+    "depends=('ripgrep')",
+    "",
+    `source_aarch64=("\${pkgname}_\${pkgver}_aarch64.tar.gz::https://github.com/anomalyco/opencode/releases/download/v\${pkgver}\${_subver}/opencode-linux-arm64.tar.gz")`,
+    `sha256sums_aarch64=('${arm64Sha}')`,
+
+    `source_x86_64=("\${pkgname}_\${pkgver}_x86_64.tar.gz::https://github.com/anomalyco/opencode/releases/download/v\${pkgver}\${_subver}/opencode-linux-x64.tar.gz")`,
+    `sha256sums_x86_64=('${x64Sha}')`,
+    "",
+    "package() {",
+    '  install -Dm755 ./opencode "${pkgdir}/usr/bin/opencode"',
+    "}",
+    "",
+  ].join("\n")
+
+  for (const [pkg, pkgbuild] of [["opencode-bin", binaryPkgbuild]]) {
+    for (let i = 0; i < 30; i++) {
+      try {
+        await $`rm -rf ./dist/aur-${pkg}`
+        await $`git clone ssh://aur@aur.archlinux.org/${pkg}.git ./dist/aur-${pkg}`
+        await $`cd ./dist/aur-${pkg} && git checkout master`
+        await Bun.file(`./dist/aur-${pkg}/PKGBUILD`).write(pkgbuild)
+        await $`cd ./dist/aur-${pkg} && makepkg --printsrcinfo > .SRCINFO`
+        await $`cd ./dist/aur-${pkg} && git add PKGBUILD .SRCINFO`
+        if ((await $`cd ./dist/aur-${pkg} && git diff --cached --quiet`.nothrow()).exitCode === 0) break
+        await $`cd ./dist/aur-${pkg} && git commit -m "Update to v${Script.version}"`
+        await $`cd ./dist/aur-${pkg} && git push`
+        break
+      } catch {
+        continue
+      }
     }
   }
 
-  const image = "ghcr.io/anomalyco/nuwaxcode"
-  const platforms = "linux/amd64,linux/arm64"
-  const tags = [`${image}:${pkg.version}`, `${image}:latest`]
-  const tagFlags = tags.flatMap((t) => ["-t", t])
-  await $`docker buildx build --platform ${platforms} ${tagFlags} --push .`
+  // Homebrew formula
+  const homebrewFormula = [
+    "# typed: false",
+    "# frozen_string_literal: true",
+    "",
+    "# This file was generated by GoReleaser. DO NOT EDIT.",
+    "class Opencode < Formula",
+    `  desc "The AI coding agent built for the terminal."`,
+    `  homepage "https://github.com/anomalyco/opencode"`,
+    `  version "${Script.version.split("-")[0]}"`,
+    "",
+    `  depends_on "ripgrep"`,
+    "",
+    "  on_macos do",
+    "    if Hardware::CPU.intel?",
+    `      url "https://github.com/anomalyco/opencode/releases/download/v${Script.version}/opencode-darwin-x64.zip"`,
+    `      sha256 "${macX64Sha}"`,
+    "",
+    "      def install",
+    '        bin.install "opencode"',
+    "      end",
+    "    end",
+    "    if Hardware::CPU.arm?",
+    `      url "https://github.com/anomalyco/opencode/releases/download/v${Script.version}/opencode-darwin-arm64.zip"`,
+    `      sha256 "${macArm64Sha}"`,
+    "",
+    "      def install",
+    '        bin.install "opencode"',
+    "      end",
+    "    end",
+    "  end",
+    "",
+    "  on_linux do",
+    "    if Hardware::CPU.intel? and Hardware::CPU.is_64_bit?",
+    `      url "https://github.com/anomalyco/opencode/releases/download/v${Script.version}/opencode-linux-x64.tar.gz"`,
+    `      sha256 "${x64Sha}"`,
+    "      def install",
+    '        bin.install "opencode"',
+    "      end",
+    "    end",
+    "    if Hardware::CPU.arm? and Hardware::CPU.is_64_bit?",
+    `      url "https://github.com/anomalyco/opencode/releases/download/v${Script.version}/opencode-linux-arm64.tar.gz"`,
+    `      sha256 "${arm64Sha}"`,
+    "      def install",
+    '        bin.install "opencode"',
+    "      end",
+    "    end",
+    "  end",
+    "end",
+    "",
+    "",
+  ].join("\n")
+
+  const token = process.env.GITHUB_TOKEN
+  if (!token) {
+    console.error("GITHUB_TOKEN is required to update homebrew tap")
+    process.exit(1)
+  }
+  const tap = `https://x-access-token:${token}@github.com/anomalyco/homebrew-tap.git`
+  await $`rm -rf ./dist/homebrew-tap`
+  await $`git clone ${tap} ./dist/homebrew-tap`
+  await Bun.file("./dist/homebrew-tap/opencode.rb").write(homebrewFormula)
+  await $`cd ./dist/homebrew-tap && git add opencode.rb`
+  if ((await $`cd ./dist/homebrew-tap && git diff --cached --quiet`.nothrow()).exitCode !== 0) {
+    await $`cd ./dist/homebrew-tap && git commit -m "Update to v${Script.version}"`
+    await $`cd ./dist/homebrew-tap && git push`
+  }
 }

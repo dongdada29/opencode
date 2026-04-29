@@ -1,132 +1,211 @@
-import { Global } from "../global"
-import { Log } from "../util/log"
+import { Global } from "@opencode-ai/core/global"
+import { Log } from "../util"
 import path from "path"
-import z from "zod"
-import { data } from "./models-macro" with { type: "macro" }
-import { Flag } from "../flag/flag"
+import { Schema } from "effect"
+import { Flag } from "@opencode-ai/core/flag/flag"
+import { lazy } from "@/util/lazy"
+import { Filesystem } from "../util"
+import { Flock } from "@opencode-ai/core/util/flock"
+import { Hash } from "@opencode-ai/core/util/hash"
 import { fetchModelsFromSource } from "./models-source"
 
-export namespace ModelsDev {
-  const log = Log.create({ service: "models.dev" })
-  const filepath = path.join(Global.Path.cache, "models.json")
+// Try to import bundled snapshot (generated at build time)
+// Falls back to undefined in dev mode when snapshot doesn't exist
+/* @ts-ignore */
 
-  // Candidate paths for bundled models.json
-  const bundledPaths = [
-    path.join(path.dirname(process.execPath), "assets", "models.json"), // compiled binary: <bin>/assets/
-    path.join(__dirname, "../../assets/models.json"),                    // dev mode: source tree
-  ]
+const log = Log.create({ service: "models.dev" })
+const source = url()
+const filepath = path.join(
+  Global.Path.cache,
+  source === "https://models.dev" ? "models.json" : `models-${Hash.fast(source)}.json`,
+)
+const ttl = 5 * 60 * 1000
+let lastResolvedSource: "cache_file" | "macro" | "bundled_asset" | "network_fetch" | "none" = "none"
 
-  export const Model = z.object({
-    id: z.string(),
-    name: z.string(),
-    family: z.string().optional(),
-    release_date: z.string(),
-    attachment: z.boolean(),
-    reasoning: z.boolean(),
-    temperature: z.boolean(),
-    tool_call: z.boolean(),
-    interleaved: z
-      .union([
-        z.literal(true),
-        z
-          .object({
-            field: z.enum(["reasoning_content", "reasoning_details"]),
-          })
-          .strict(),
-      ])
-      .optional(),
-    cost: z
-      .object({
-        input: z.number(),
-        output: z.number(),
-        cache_read: z.number().optional(),
-        cache_write: z.number().optional(),
-      })
-      .optional(),
-    limit: z.object({
-      context: z.number(),
-      input: z.number().optional(),
-      output: z.number(),
+const bundledPaths = [
+  path.join(path.dirname(process.execPath), "assets", "models.json"),
+  path.join(__dirname, "../../assets/models.json"),
+]
+
+const Cost = Schema.Struct({
+  input: Schema.Number,
+  output: Schema.Number,
+  cache_read: Schema.optional(Schema.Number),
+  cache_write: Schema.optional(Schema.Number),
+  context_over_200k: Schema.optional(
+    Schema.Struct({
+      input: Schema.Number,
+      output: Schema.Number,
+      cache_read: Schema.optional(Schema.Number),
+      cache_write: Schema.optional(Schema.Number),
     }),
-    modalities: z
-      .object({
-        input: z.array(z.enum(["text", "api", "image", "video", "pdf"])),
-        output: z.array(z.enum(["text", "api", "image", "video", "pdf"])),
-      })
-      .optional(),
-    experimental: z.boolean().optional(),
-    status: z.enum(["alpha", "beta", "deprecated"]).optional(),
-    options: z.record(z.string(), z.any()),
-    headers: z.record(z.string(), z.string()).optional(),
-    provider: z.object({ npm: z.string() }).optional(),
-    variants: z.record(z.string(), z.record(z.string(), z.any())).optional(),
-  })
-  export type Model = z.infer<typeof Model>
+  ),
+})
 
-  export const Provider = z.object({
-    api: z.string().optional(),
-    name: z.string(),
-    env: z.array(z.string()),
-    id: z.string(),
-    npm: z.string().optional(),
-    models: z.record(z.string(), Model),
-  })
+export const Model = Schema.Struct({
+  id: Schema.String,
+  name: Schema.String,
+  family: Schema.optional(Schema.String),
+  release_date: Schema.String,
+  attachment: Schema.Boolean,
+  reasoning: Schema.Boolean,
+  temperature: Schema.Boolean,
+  tool_call: Schema.Boolean,
+  interleaved: Schema.optional(
+    Schema.Union([
+      Schema.Literal(true),
+      Schema.Struct({
+        field: Schema.Literals(["reasoning_content", "reasoning_details"]),
+      }),
+    ]),
+  ),
+  cost: Schema.optional(Cost),
+  limit: Schema.Struct({
+    context: Schema.Number,
+    input: Schema.optional(Schema.Number),
+    output: Schema.Number,
+  }),
+  modalities: Schema.optional(
+    Schema.Struct({
+      input: Schema.Array(Schema.Literals(["text", "audio", "image", "video", "pdf"])),
+      output: Schema.Array(Schema.Literals(["text", "audio", "image", "video", "pdf"])),
+    }),
+  ),
+  experimental: Schema.optional(
+    Schema.Struct({
+      modes: Schema.optional(
+        Schema.Record(
+          Schema.String,
+          Schema.Struct({
+            cost: Schema.optional(Cost),
+            provider: Schema.optional(
+              Schema.Struct({
+                body: Schema.optional(Schema.Record(Schema.String, Schema.MutableJson)),
+                headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+              }),
+            ),
+          }),
+        ),
+      ),
+    }),
+  ),
+  status: Schema.optional(Schema.Literals(["alpha", "beta", "deprecated"])),
+  provider: Schema.optional(
+    Schema.Struct({ npm: Schema.optional(Schema.String), api: Schema.optional(Schema.String) }),
+  ),
+})
+export type Model = Schema.Schema.Type<typeof Model>
 
-  export type Provider = z.infer<typeof Provider>
+export const Provider = Schema.Struct({
+  api: Schema.optional(Schema.String),
+  name: Schema.String,
+  env: Schema.Array(Schema.String),
+  id: Schema.String,
+  npm: Schema.optional(Schema.String),
+  models: Schema.Record(Schema.String, Model),
+})
 
-  export async function get() {
-    const startedAt = Date.now()
-    refresh()
-    const result = await fetchModelsFromSource({
-      cachePath: filepath,
-      bundledPaths,
-      macroData: typeof data === "function" ? data : undefined,
-    })
-    if (!result.ok) {
-      log.error("models.get.all_sources_failed", {
-        totalMs: Date.now() - startedAt,
-        source: result.source,
-      })
-      throw new Error("No models data available: cache, macro, bundled asset, and network all unavailable")
-    }
-    const providers = JSON.parse(result.data) as Record<string, Provider>
-    log.info("models.get", {
-      source: result.source,
-      providerCount: Object.keys(providers).length,
-      totalMs: Date.now() - startedAt,
-    })
-    return providers
+export type Provider = Schema.Schema.Type<typeof Provider>
+
+function url() {
+  return Flag.OPENCODE_MODELS_URL || "https://models.dev"
+}
+
+function fresh() {
+  return Date.now() - Number(Filesystem.stat(filepath)?.mtimeMs ?? 0) < ttl
+}
+
+function skip(force: boolean) {
+  return !force && fresh()
+}
+
+export const Data = lazy(async () => {
+  const result = await Filesystem.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).catch(() => {})
+  if (result) {
+    lastResolvedSource = "cache_file"
+    return result
   }
-
-  export async function refresh() {
-    if (Flag.OPENCODE_DISABLE_MODELS_FETCH) return
-    const refreshStart = Date.now()
-
-    // Refresh uses local sources only — no network fetch
-    const result = await fetchModelsFromSource({
-      cachePath: filepath,
-      bundledPaths,
-      skipCache: true,
-      skipNetwork: true,
-    })
-
-    if (!result.ok) {
-      log.warn("models.refresh.skipped", {
-        elapsedMs: Date.now() - refreshStart,
-        source: result.source,
-      })
-      return
+  return Flock.withLock(`models-dev:${filepath}`, async () => {
+    const lockedResult = await Filesystem.readJson(Flag.OPENCODE_MODELS_PATH ?? filepath).catch(() => {})
+    if (lockedResult) {
+      lastResolvedSource = "cache_file"
+      return lockedResult
     }
-
-    const file = Bun.file(filepath)
-    await Bun.write(file, result.data)
-    log.info("models.refresh.done", {
-      source: result.source,
-      elapsedMs: Date.now() - refreshStart,
-      bytes: result.data.length,
-      filepath,
+    const sourceResult = await fetchModelsFromSource({
+      cachePath: Flag.OPENCODE_MODELS_PATH ?? filepath,
+      bundledPaths,
+      macroData: async () => {
+        // @ts-ignore
+        const snapshot = await import("./models-snapshot.js")
+          .then((m) => m.snapshot as Record<string, unknown>)
+          .catch(() => undefined)
+        return snapshot ? JSON.stringify(snapshot) : undefined
+      },
+      skipNetwork: Flag.OPENCODE_DISABLE_MODELS_FETCH,
+      url: `${url()}/api.json`,
     })
+    if (!sourceResult.ok) {
+      lastResolvedSource = "none"
+      throw new Error(
+        `No models data available: cache, macro, bundled asset, and network all unavailable (source: ${sourceResult.source})`,
+      )
+    }
+    lastResolvedSource = sourceResult.source
+    if (sourceResult.source === "network_fetch") {
+      await Filesystem.write(filepath, sourceResult.data).catch((e) => {
+        log.error("Failed to write models cache", { error: e })
+      })
+    }
+    return JSON.parse(sourceResult.data)
+  })
+})
+
+export async function get() {
+  const result = await Data()
+  return result as Record<string, Provider>
+}
+
+export function sourceInfo() {
+  return {
+    source: lastResolvedSource,
+    cachePath: Flag.OPENCODE_MODELS_PATH ?? filepath,
+    modelsURL: url(),
+    fetchDisabled: !!Flag.OPENCODE_DISABLE_MODELS_FETCH,
   }
 }
 
-setInterval(() => ModelsDev.refresh(), 60 * 1000 * 60).unref()
+export async function refresh(force = false) {
+  if (skip(force)) return Data.reset()
+  await Flock.withLock(`models-dev:${filepath}`, async () => {
+    if (skip(force)) return Data.reset()
+    const sourceResult = await fetchModelsFromSource({
+      cachePath: Flag.OPENCODE_MODELS_PATH ?? filepath,
+      bundledPaths,
+      skipCache: true,
+      skipNetwork: Flag.OPENCODE_DISABLE_MODELS_FETCH,
+      url: `${url()}/api.json`,
+    })
+    if (!sourceResult.ok) return
+    lastResolvedSource = sourceResult.source
+    if (sourceResult.source === "network_fetch") {
+      await Filesystem.write(filepath, sourceResult.data).catch((e) => {
+        log.error("Failed to write models cache", { error: e })
+      })
+    }
+    Data.reset()
+  }).catch((e) => {
+    log.error("Failed to fetch models.dev", {
+      error: e,
+    })
+  })
+}
+
+if (!Flag.OPENCODE_DISABLE_MODELS_FETCH && !process.argv.includes("--get-yargs-completions")) {
+  void refresh()
+  setInterval(
+    async () => {
+      await refresh()
+    },
+    60 * 1000 * 60,
+  ).unref()
+}

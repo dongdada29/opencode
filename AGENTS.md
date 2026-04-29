@@ -4,11 +4,12 @@
 - The default branch in this repo is `feat/nuwaxcode`.
 - **Release Workflow**:
   1. **Changelog**: Update `CHANGELOG-nuwaxcode.md` with new version details.
-  2. **Run Script**:
-     - Run: `./release.sh <new_version>` (e.g., `./release.sh 1.1.52`)
-     - The script will automatically:
-       - Bump version in `packages/opencode/package.json`.
-       - Sync all `optionalDependencies`.
-       - Run `publish` with `--latest` (default `NPM_DIST_TAG=latest`).
-       - (Optional) Pass OTP as second argument: `./release.sh 1.1.52 123456`
-     - **Pre-release / do not move `latest`**: set `NPM_DIST_TAG=beta` (or another tag). Example: `NPM_DIST_TAG=beta ./release.sh 1.1.72` — publishes under the `beta` dist-tag only; `npm install nuwaxcode` still resolves `latest` to the previous release.
+  2. **Bump Version**: Update `packages/opencode/package.json` version field.
+  3. **Commit & Push**: Push changes to `feat/nuwaxcode` branch.
+  4. **Tag & Trigger CI**: `git tag v<version> && git push origin v<version>`
+     - CI (`.github/workflows/build-release.yml`) builds all 11 platform targets on a single ubuntu-24.04 runner via Bun cross-compilation.
+     - Produces 13 archives: darwin (arm64, x64, x64-baseline), linux (arm64, x64, x64-baseline, arm64-musl, x64-musl, x64-baseline-musl), windows (x64, x64-baseline, each with .tar.gz + .zip).
+     - Auto-creates GitHub Release and uploads all assets.
+  5. **Verify**: Check release at `https://github.com/nuwax-ai/nuwaxcode/releases/tag/v<version>`.
+  6. **Electron Integration**: Update `NUWAXCODE_VERSION` in Electron client's `scripts/prepare/prepare-nuwaxcode.js` and `installVersion` in `src/main/services/system/dependencies.ts`, then run `node scripts/prepare/prepare-nuwaxcode.js`.
+  7. **npm publish** (optional): Run `./release.sh <new_version>` for npm registry publish.

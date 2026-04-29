@@ -1,87 +1,72 @@
 import { Installation } from "../installation"
-import { Log } from "../util/log"
+import { Log } from "../util"
 
 const log = Log.create({ service: "models.source" })
 
 export type SourceResult =
-  | { ok: true; data: string; source: string }
-  | { ok: false; source: string; reason: string }
+  | { ok: true; data: string; source: "cache_file" | "macro" | "bundled_asset" | "network_fetch" }
+  | { ok: false; source: "network_fetch" | "none"; reason: string }
 
 export interface FetchModelsOptions {
-  /** Path to the cache file (e.g. ~/.cache/opencode/models.json) */
   cachePath: string
-  /** Candidate paths for bundled asset (tries in order) */
   bundledPaths: string[]
-  /** Build-time macro data function, if available */
-  macroData?: () => Promise<string>
-  /** Skip reading from cache (useful for refresh) */
+  macroData?: () => Promise<string | undefined>
   skipCache?: boolean
-  /** Skip network fetch entirely */
   skipNetwork?: boolean
+  url?: string
 }
 
 /**
- * Unified method to fetch models JSON from available sources.
- * Priority: cache file → macro → bundled asset → network fetch
+ * Unified models source loader.
+ * Priority: cache -> embedded macro -> bundled asset -> network.
  */
 export async function fetchModelsFromSource(options: FetchModelsOptions): Promise<SourceResult> {
-  log.info("fetchFromSource.start", {
+  log.info("fetch.start", {
     cachePath: options.cachePath,
     bundledPaths: options.bundledPaths,
     skipCache: options.skipCache ?? false,
     skipNetwork: options.skipNetwork ?? false,
     hasMacroData: !!options.macroData,
+    url: options.url ?? "https://models.dev/api.json",
   })
 
-  // 1. Cache file
   if (!options.skipCache) {
-    const cacheFile = Bun.file(options.cachePath)
-    const cached = await cacheFile.text().catch(() => undefined)
-    if (cached) {
-      log.info("fetchFromSource.hit", { source: "cache_file", bytes: cached.length })
-      return { ok: true, data: cached, source: "cache_file" }
+    const text = await Bun.file(options.cachePath).text().catch(() => undefined)
+    if (text) {
+      log.info("fetch.hit", { source: "cache_file", bytes: text.length })
+      return { ok: true, data: text, source: "cache_file" }
     }
   }
 
-  // 2. Macro (build-time embedded data)
   if (options.macroData) {
-    const json = await options.macroData()
-    if (json) {
-      log.info("fetchFromSource.hit", { source: "macro", bytes: json.length })
-      return { ok: true, data: json, source: "macro" }
+    const text = await options.macroData().catch(() => undefined)
+    if (text) {
+      log.info("fetch.hit", { source: "macro", bytes: text.length })
+      return { ok: true, data: text, source: "macro" }
     }
   }
 
-  // 3. Bundled asset (try each candidate path)
-  for (const bundledPath of options.bundledPaths) {
-    const bundledFile = Bun.file(bundledPath)
-    const bundledExists = await bundledFile.exists()
-    log.info("fetchFromSource.bundled_check", {
-      path: bundledPath,
-      exists: bundledExists,
-    })
-    if (bundledExists) {
-      const text = await bundledFile.text()
-      if (text) {
-        log.info("fetchFromSource.hit", { source: "bundled_asset", bytes: text.length, path: bundledPath })
-        return { ok: true, data: text, source: "bundled_asset" }
-      }
+  for (const candidate of options.bundledPaths) {
+    const file = Bun.file(candidate)
+    const exists = await file.exists()
+    log.info("fetch.bundle.check", { path: candidate, exists })
+    if (!exists) continue
+    const text = await file.text().catch(() => undefined)
+    if (text) {
+      log.info("fetch.hit", { source: "bundled_asset", bytes: text.length, path: candidate })
+      return { ok: true, data: text, source: "bundled_asset" }
     }
   }
 
-  // 4. Network fetch
   if (!options.skipNetwork) {
-    log.info("fetchFromSource.network_fetch", { url: "https://models.dev/api.json" })
-    const result = await fetch("https://models.dev/api.json", {
-      headers: {
-        "User-Agent": Installation.USER_AGENT,
-      },
-      signal: AbortSignal.timeout(10 * 1000),
+    const networkUrl = options.url ?? "https://models.dev/api.json"
+    const result = await fetch(networkUrl, {
+      headers: { "User-Agent": Installation.USER_AGENT },
+      signal: AbortSignal.timeout(10000),
     }).catch(() => null)
-
-    if (result && result.ok) {
+    if (result?.ok) {
       const text = await result.text()
-      log.info("fetchFromSource.hit", { source: "network_fetch", bytes: text.length })
+      log.info("fetch.hit", { source: "network_fetch", bytes: text.length, url: networkUrl })
       return { ok: true, data: text, source: "network_fetch" }
     }
     return { ok: false, source: "network_fetch", reason: `HTTP ${result?.status ?? "fetch error"}` }

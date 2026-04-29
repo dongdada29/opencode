@@ -2,23 +2,29 @@
 
 本文档总结了 `feat/nuwaxcode` 分支相对于主分支的主要更改。
 
-## v1.1.76 (2026-04-17)
-
-### 🔄 发布与工具链
-
-- **Publish**：任一平台子包 `npm publish` 失败时中止流程，避免主包已发布而 `optionalDependencies` 指向的子包缺失（例如 Linux 全局安装报找不到 `nuwaxcode-linux-x64`）。
-- **Postinstall**：找不到平台包时补充错误说明，指向 optional 安装失败或 registry 缺同版本子包等常见原因。
-- **Release**：`release.sh` 在发布成功后默认校验 npm 上主包声明的全部 optional 子包是否存在；可通过 `SKIP_REGISTRY_VERIFY=1` 跳过。
-- **Scripts**：新增 `verify:registry`（`script/verify-registry-complete.ts`），可单独校验指定或当前版本的 registry 完整性。
-
----
-
-## v1.1.75 (2026-04-16)
+## v1.1.68 (2026-03-31)
 
 ### 🐛 修复
 
-- **Models**: 修复已安装 CLI 在打包/安装场景下对模型元数据资源的读取链路，确保编译后二进制可优先从本地随包分发的 `bin/assets/models.json` 加载模型数据。
-- **Packaging**: 验证本地构建、npm 打包、隔离环境安装与全局安装流程，确认 `nuwaxcode` 安装后可正常启动，并能在无旧缓存条件下命中 bundled `models.json`。
+- **ACP/MCP 初始化**: `non_blocking` 模式下 MCP 初始化超时后会清理等待句柄，避免后续 prompt 重复等待同一超时窗口导致首字延迟累积。
+- **MCP 批量加载**: `addBatch` 增加单 server 异常隔离，`create()` 抛错时不会中断整批加载，并补充 `create_threw` summary 日志便于排障。
+
+---
+
+## v1.1.67 (2026-03-31)
+
+### ✨ 新特性
+
+- **Logging**: ACP 全链路日志增强，补充 request/session 关联信息与端到端排障观测字段，便于定位首包与 MCP 初始化链路问题。
+
+---
+
+## v1.1.66 (2026-03-30)
+
+### 🔄 优化
+
+- **MCP 懒加载**: ACP `newSession` 不再同步等待 MCP 服务器连接建立，改为 fire-and-forget 后台初始化，首次 `prompt` 时按需等待。`acp.session.create` 耗时从 ~2890ms 降至 ~10ms，与 claude-code 一致。
+- **CI 标准化**: 新增 tag 触发的 `build-release.yml` 工作流，单 runner 通过 Bun 跨平台编译构建全部 11 个目标（darwin/linux/windows 含 baseline、musl 变体），自动创建 GitHub Release 并上传全部 13 个平台资产。
 
 ---
 

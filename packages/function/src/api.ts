@@ -13,6 +13,7 @@ type Env = {
 }
 
 export class SyncServer extends DurableObject<Env> {
+  // oxlint-disable-next-line no-useless-constructor
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env)
   }
@@ -35,9 +36,9 @@ export class SyncServer extends DurableObject<Env> {
     })
   }
 
-  async webSocketMessage(ws, message) {}
+  async webSocketMessage(_ws, _message) {}
 
-  async webSocketClose(ws, code, reason, wasClean) {
+  async webSocketClose(ws, code, _reason, _wasClean) {
     ws.close(code, "Durable Object is closing WebSocket")
   }
 
@@ -181,7 +182,7 @@ export default new Hono<{ Bindings: Env }>()
     let info
     const messages: Record<string, any> = {}
     data.forEach((d) => {
-      const [root, type, ...splits] = d.key.split("/")
+      const [root, type] = d.key.split("/")
       if (root !== "session") return
       if (type === "info") {
         info = d.content
@@ -199,6 +200,60 @@ export default new Hono<{ Bindings: Env }>()
     })
 
     return c.json({ info, messages })
+  })
+  .post("/feishu", async (c) => {
+    const body = (await c.req.json()) as {
+      challenge?: string
+      event?: {
+        message?: {
+          message_id?: string
+          root_id?: string
+          parent_id?: string
+          chat_id?: string
+          content?: string
+        }
+      }
+    }
+    console.log(JSON.stringify(body, null, 2))
+    const challenge = body.challenge
+    if (challenge) return c.json({ challenge })
+
+    const content = body.event?.message?.content
+    const parsed =
+      typeof content === "string" && content.trim().startsWith("{")
+        ? (JSON.parse(content) as {
+            text?: string
+          })
+        : undefined
+    const text = typeof parsed?.text === "string" ? parsed.text : typeof content === "string" ? content : ""
+
+    let message = text.trim().replace(/^@_user_\d+\s*/, "")
+    message = message.replace(/^aiden,?\s*/i, "<@759257817772851260> ")
+    if (!message) return c.json({ ok: true })
+
+    const threadId = body.event?.message?.root_id || body.event?.message?.message_id
+    if (threadId) message = `${message} [${threadId}]`
+
+    const response = await fetch(
+      `https://discord.com/api/v10/channels/${Resource.DISCORD_SUPPORT_CHANNEL_ID.value}/messages`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bot ${Resource.DISCORD_SUPPORT_BOT_TOKEN.value}`,
+        },
+        body: JSON.stringify({
+          content: `${message}`,
+        }),
+      },
+    )
+
+    if (!response.ok) {
+      console.error(await response.text())
+      return c.json({ error: "Discord bot message failed" }, { status: 502 })
+    }
+
+    return c.json({ ok: true })
   })
   /**
    * Used by the GitHub action to get GitHub installation access token given the OIDC token

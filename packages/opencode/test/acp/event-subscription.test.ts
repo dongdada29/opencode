@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { ACP } from "../../src/acp/agent"
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
-import type { Event } from "@opencode-ai/sdk/v2"
+import type { Event, EventMessagePartUpdated, ToolStatePending, ToolStateRunning } from "@opencode-ai/sdk/v2"
 import { Instance } from "../../src/project/instance"
 import { tmpdir } from "../fixture/fixture"
 
@@ -17,6 +17,63 @@ type GlobalEventEnvelope = {
 type EventController = {
   push: (event: GlobalEventEnvelope) => void
   close: () => void
+}
+
+function inProgressText(update: SessionUpdateParams["update"]) {
+  if (update.sessionUpdate !== "tool_call_update") return undefined
+  if (update.status !== "in_progress") return undefined
+  if (!update.content || !Array.isArray(update.content)) return undefined
+  const first = update.content[0]
+  if (!first || first.type !== "content") return undefined
+  if (first.content.type !== "text") return undefined
+  return first.content.text
+}
+
+function isToolCallUpdate(
+  update: SessionUpdateParams["update"],
+): update is Extract<SessionUpdateParams["update"], { sessionUpdate: "tool_call_update" }> {
+  return update.sessionUpdate === "tool_call_update"
+}
+
+function toolEvent(
+  sessionId: string,
+  cwd: string,
+  opts: {
+    callID: string
+    tool: string
+    input: Record<string, unknown>
+  } & ({ status: "running"; metadata?: Record<string, unknown> } | { status: "pending"; raw: string }),
+): GlobalEventEnvelope {
+  const state: ToolStatePending | ToolStateRunning =
+    opts.status === "running"
+      ? {
+          status: "running",
+          input: opts.input,
+          ...(opts.metadata && { metadata: opts.metadata }),
+          time: { start: Date.now() },
+        }
+      : {
+          status: "pending",
+          input: opts.input,
+          raw: opts.raw,
+        }
+  const payload: EventMessagePartUpdated = {
+    type: "message.part.updated",
+    properties: {
+      sessionID: sessionId,
+      time: Date.now(),
+      part: {
+        id: `part_${opts.callID}`,
+        sessionID: sessionId,
+        messageID: `msg_${opts.callID}`,
+        type: "tool",
+        callID: opts.callID,
+        tool: opts.tool,
+        state,
+      },
+    },
+  }
+  return { directory: cwd, payload }
 }
 
 function createEventStream() {
@@ -65,6 +122,7 @@ function createEventStream() {
 function createFakeAgent() {
   const updates = new Map<string, string[]>()
   const chunks = new Map<string, string>()
+  const sessionUpdates: SessionUpdateParams[] = []
   const record = (sessionId: string, type: string) => {
     const list = updates.get(sessionId) ?? []
     list.push(type)
@@ -73,6 +131,7 @@ function createFakeAgent() {
 
   const connection = {
     async sessionUpdate(params: SessionUpdateParams) {
+      sessionUpdates.push(params)
       const update = params.update
       const type = update?.sessionUpdate ?? "unknown"
       record(params.sessionId, type)
@@ -122,12 +181,20 @@ function createFakeAgent() {
       messages: async () => {
         return { data: [] }
       },
-      message: async () => {
+      message: async (params?: any) => {
+        // Return a message with parts that can be looked up by partID
         return {
           data: {
             info: {
               role: "assistant",
             },
+            parts: [
+              {
+                id: params?.messageID ? `${params.messageID}_part` : "part_1",
+                type: "text",
+                text: "",
+              },
+            ],
           },
         }
       },
@@ -186,14 +253,14 @@ function createFakeAgent() {
 
   const stop = () => {
     controller.close()
-      ; (agent as any).eventAbort.abort()
+    ;(agent as any).eventAbort.abort()
   }
 
-  return { agent, controller, calls, updates, chunks, stop, sdk, connection }
+  return { agent, controller, calls, updates, chunks, sessionUpdates, stop, sdk, connection }
 }
 
 describe("acp.agent event subscription", () => {
-  test("routes message.part.updated by the event sessionID (no cross-session pollution)", async () => {
+  test("routes message.part.delta by the event sessionID (no cross-session pollution)", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
       directory: tmp.path,
@@ -207,14 +274,12 @@ describe("acp.agent event subscription", () => {
         controller.push({
           directory: cwd,
           payload: {
-            type: "message.part.updated",
+            type: "message.part.delta",
             properties: {
-              part: {
-                sessionID: sessionB,
-                messageID: "msg_1",
-                type: "text",
-                synthetic: false,
-              },
+              sessionID: sessionB,
+              messageID: "msg_1",
+              partID: "msg_1_part",
+              field: "text",
               delta: "hello",
             },
           },
@@ -230,7 +295,47 @@ describe("acp.agent event subscription", () => {
     })
   })
 
-  test("keeps concurrent sessions isolated when message.part.updated events are interleaved", async () => {
+  test("does not emit user_message_chunk for live prompt parts", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, sessionUpdates, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push({
+          directory: cwd,
+          payload: {
+            type: "message.part.updated",
+            properties: {
+              sessionID: sessionId,
+              time: Date.now(),
+              part: {
+                id: "part_1",
+                sessionID: sessionId,
+                messageID: "msg_user",
+                type: "text",
+                text: "hello",
+              },
+            },
+          },
+        } as any)
+
+        await new Promise((r) => setTimeout(r, 20))
+
+        expect(
+          sessionUpdates
+            .filter((u) => u.sessionId === sessionId)
+            .some((u) => u.update.sessionUpdate === "user_message_chunk"),
+        ).toBe(false)
+
+        stop()
+      },
+    })
+  })
+
+  test("keeps concurrent sessions isolated when message.part.delta events are interleaved", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
       directory: tmp.path,
@@ -248,14 +353,12 @@ describe("acp.agent event subscription", () => {
           controller.push({
             directory: cwd,
             payload: {
-              type: "message.part.updated",
+              type: "message.part.delta",
               properties: {
-                part: {
-                  sessionID: sessionId,
-                  messageID,
-                  type: "text",
-                  synthetic: false,
-                },
+                sessionID: sessionId,
+                messageID,
+                partID: `${messageID}_part`,
+                field: "text",
                 delta,
               },
             },
@@ -360,9 +463,9 @@ describe("acp.agent event subscription", () => {
 
         // Make permission request for session A block until we release it
         const originalRequestPermission = connection.requestPermission.bind(connection)
-        let permissionCalls = 0
+        let _permissionCalls = 0
         connection.requestPermission = async (params: RequestPermissionParams) => {
-          permissionCalls++
+          _permissionCalls++
           if (params.sessionId.endsWith("1")) {
             await permissionABlocking
           }
@@ -402,14 +505,12 @@ describe("acp.agent event subscription", () => {
         controller.push({
           directory: cwd,
           payload: {
-            type: "message.part.updated",
+            type: "message.part.delta",
             properties: {
-              part: {
-                sessionID: sessionB,
-                messageID: "msg_b",
-                type: "text",
-                synthetic: false,
-              },
+              sessionID: sessionB,
+              messageID: "msg_b",
+              partID: "msg_b_part",
+              field: "text",
               delta: "session_b_message",
             },
           },
@@ -434,80 +535,189 @@ describe("acp.agent event subscription", () => {
     })
   })
 
-  test("question.asked events are auto-rejected in ACP mode", async () => {
+  test("streams running bash output snapshots and de-dupes identical snapshots", async () => {
     await using tmp = await tmpdir()
     await Instance.provide({
       directory: tmp.path,
       fn: async () => {
-        const { agent, controller, stop, connection } = createFakeAgent()
-
-        // In ACP mode, questions are now auto-rejected since ACP clients
-        // typically don't support interactive questions.
-
-        const { Bus } = await import("../../src/bus")
-        const { Question } = await import("../../src/question")
-
-        // Listen for rejected events (not replied)
-        const rejectedPromise = new Promise<{ requestID: string; sessionID: string }>((resolve) => {
-          const sub = Bus.subscribe(Question.Event.Rejected, (payload) => {
-            resolve(payload.properties)
-            sub()
-          })
-        })
-
+        const { agent, controller, sessionUpdates, stop } = createFakeAgent()
         const cwd = "/tmp/opencode-acp-test"
-        const sessionA = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+        const input = { command: "echo hello", description: "run command" }
 
-        // Verify requestPermission is NOT called for questions (since we auto-reject)
-        let requestPermissionCalled = false
-        const originalRequestPermission = connection.requestPermission
-        connection.requestPermission = async (params) => {
-          if (params.toolCall.kind === ("question" as any)) {
-            requestPermissionCalled = true
-          }
-          return originalRequestPermission(params)
+        for (const output of ["a", "a", "ab"]) {
+          controller.push(
+            toolEvent(sessionId, cwd, {
+              callID: "call_1",
+              tool: "bash",
+              status: "running",
+              input,
+              metadata: { output },
+            }),
+          )
         }
+        await new Promise((r) => setTimeout(r, 20))
 
-        // Wait for the asked event on the Bus
-        const askedEventPromise = new Promise<any>((resolve) => {
-          const sub = Bus.subscribe(Question.Event.Asked, (payload) => {
-            resolve(payload.properties)
-            sub()
-          })
+        const snapshots = sessionUpdates
+          .filter((u) => u.sessionId === sessionId)
+          .filter((u) => isToolCallUpdate(u.update))
+          .map((u) => inProgressText(u.update))
+
+        expect(snapshots).toEqual(["a", undefined, "ab"])
+        stop()
+      },
+    })
+  })
+
+  test("emits synthetic pending before first running update for any tool", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, sessionUpdates, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+
+        controller.push(
+          toolEvent(sessionId, cwd, {
+            callID: "call_bash",
+            tool: "bash",
+            status: "running",
+            input: { command: "echo hi", description: "run command" },
+            metadata: { output: "hi\n" },
+          }),
+        )
+        controller.push(
+          toolEvent(sessionId, cwd, {
+            callID: "call_read",
+            tool: "read",
+            status: "running",
+            input: { filePath: "/tmp/example.txt" },
+          }),
+        )
+        await new Promise((r) => setTimeout(r, 20))
+
+        const types = sessionUpdates
+          .filter((u) => u.sessionId === sessionId)
+          .map((u) => u.update.sessionUpdate)
+          .filter((u) => u === "tool_call" || u === "tool_call_update")
+        expect(types).toEqual(["tool_call", "tool_call_update", "tool_call", "tool_call_update"])
+
+        const pendings = sessionUpdates.filter(
+          (u) => u.sessionId === sessionId && u.update.sessionUpdate === "tool_call",
+        )
+        expect(pendings.every((p) => p.update.sessionUpdate === "tool_call" && p.update.status === "pending")).toBe(
+          true,
+        )
+        stop()
+      },
+    })
+  })
+
+  test("does not emit duplicate synthetic pending after replayed running tool", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, sessionUpdates, stop, sdk } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+        const input = { command: "echo hi", description: "run command" }
+
+        sdk.session.messages = async () => ({
+          data: [
+            {
+              info: {
+                role: "assistant",
+                sessionID: sessionId,
+              },
+              parts: [
+                {
+                  type: "tool",
+                  callID: "call_1",
+                  tool: "bash",
+                  state: {
+                    status: "running",
+                    input,
+                    metadata: { output: "hi\n" },
+                    time: { start: Date.now() },
+                  },
+                },
+              ],
+            },
+          ],
         })
 
-        // Question.ask will reject with RejectedError since we auto-reject
-        const realAskPromise = Question.ask({
-          sessionID: sessionA,
-          questions: [{
-            question: "Do you like code?",
-            header: "Poll",
-            options: [{ label: "Yes", description: "I love it" }, { label: "No", description: "I hate it" }]
-          }]
-        }).catch((e) => e) // Catch the rejection
+        await agent.loadSession({ sessionId, cwd, mcpServers: [] } as any)
+        controller.push(
+          toolEvent(sessionId, cwd, {
+            callID: "call_1",
+            tool: "bash",
+            status: "running",
+            input,
+            metadata: { output: "hi\nthere\n" },
+          }),
+        )
+        await new Promise((r) => setTimeout(r, 20))
 
-        const askedEvent = await askedEventPromise
+        const types = sessionUpdates
+          .filter((u) => u.sessionId === sessionId)
+          .map((u) => u.update)
+          .filter((u) => "toolCallId" in u && u.toolCallId === "call_1")
+          .map((u) => u.sessionUpdate)
+          .filter((u) => u === "tool_call" || u === "tool_call_update")
 
-        // Now feed this into our Agent's mocked event stream
-        controller.push({
-          directory: cwd,
-          payload: {
-            type: "question.asked",
-            properties: askedEvent
-          }
-        } as any)
+        expect(types).toEqual(["tool_call", "tool_call_update", "tool_call_update"])
+        stop()
+      },
+    })
+  })
 
-        // Wait for the rejection
-        const rejected = await rejectedPromise
+  test("clears bash snapshot marker on pending state", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const { agent, controller, sessionUpdates, stop } = createFakeAgent()
+        const cwd = "/tmp/opencode-acp-test"
+        const sessionId = await agent.newSession({ cwd, mcpServers: [] } as any).then((x) => x.sessionId)
+        const input = { command: "echo hello", description: "run command" }
 
-        expect(rejected.requestID).toBe(askedEvent.id)
-        expect(rejected.sessionID).toBe(sessionA)
-        expect(requestPermissionCalled).toBe(false) // Should NOT call requestPermission
+        controller.push(
+          toolEvent(sessionId, cwd, {
+            callID: "call_1",
+            tool: "bash",
+            status: "running",
+            input,
+            metadata: { output: "a" },
+          }),
+        )
+        controller.push(
+          toolEvent(sessionId, cwd, {
+            callID: "call_1",
+            tool: "bash",
+            status: "pending",
+            input,
+            raw: '{"command":"echo hello"}',
+          }),
+        )
+        controller.push(
+          toolEvent(sessionId, cwd, {
+            callID: "call_1",
+            tool: "bash",
+            status: "running",
+            input,
+            metadata: { output: "a" },
+          }),
+        )
+        await new Promise((r) => setTimeout(r, 20))
 
-        // Verify the ask promise was rejected
-        const result = await realAskPromise
-        expect(result).toBeInstanceOf(Question.RejectedError)
+        const snapshots = sessionUpdates
+          .filter((u) => u.sessionId === sessionId)
+          .filter((u) => isToolCallUpdate(u.update))
+          .map((u) => inProgressText(u.update))
 
+        expect(snapshots).toEqual(["a", "a"])
         stop()
       },
     })

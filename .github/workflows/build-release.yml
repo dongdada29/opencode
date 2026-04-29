@@ -1,0 +1,139 @@
+name: build-release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 1.1.66)"
+        required: false
+        type: string
+
+concurrency: build-release-${{ github.ref }}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install zip utility
+        run: sudo apt-get update && sudo apt-get install -y zip
+
+      - name: Install dependencies
+        run: |
+          bun install
+          mkdir -p packages/opencode/node_modules/@opentui
+          for pkg in solid core; do
+            if [ ! -e packages/opencode/node_modules/@opentui/$pkg ]; then
+              ln -s "$(pwd)/node_modules/@opentui/$pkg" packages/opencode/node_modules/@opentui/$pkg
+              echo "Linked @opentui/$pkg"
+            fi
+          done
+
+      - name: Read version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+            echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build all targets
+        working-directory: packages/opencode
+        run: bun run script/build.ts
+        env:
+          OPENCODE_VERSION: ${{ steps.version.outputs.version }}
+
+      - name: List dist directories
+        run: ls -la packages/opencode/dist/
+
+      - name: Copy bundled models.json
+        run: |
+          cd packages/opencode
+          for dir in dist/*/; do
+            mkdir -p "${dir}bin/assets"
+            cp assets/models.json "${dir}bin/assets/"
+            echo "Copied models.json to ${dir}bin/assets/"
+          done
+
+      - name: Create archives
+        run: |
+          cd packages/opencode
+          for dir in dist/*/; do
+            name=$(basename "$dir")
+            echo "--- Archiving $name ---"
+            tar czf "${{ github.workspace }}/${name}.tar.gz" -C "${dir}bin" .
+            if [[ "$name" == *windows* ]]; then
+              (cd "${dir}bin" && zip -r "${{ github.workspace }}/${name}.zip" .)
+            fi
+          done
+
+      - name: List archives
+        run: ls -lh ${{ github.workspace }}/*.tar.gz ${{ github.workspace }}/*.zip
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-platforms
+          retention-days: 1
+          path: |
+            ${{ github.workspace }}/*.tar.gz
+            ${{ github.workspace }}/*.zip
+
+  release:
+    needs: build
+    if: always() && needs.build.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List artifacts
+        run: find artifacts -type f | sort
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+            echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create/update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="v${VERSION}"
+
+          if gh release view "$TAG" 2>/dev/null; then
+            echo "Release $TAG already exists, updating assets..."
+          else
+            echo "Creating release $TAG..."
+            gh release create "$TAG" --title "$TAG" --notes "nuwaxcode $TAG"
+          fi
+
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.zip" \) | while read file; do
+            echo "Uploading: $file"
+            gh release upload "$TAG" "$file" --clobber
+          done
+
+          echo "=== Release $TAG assets ==="
+          gh release view "$TAG" --json assets --jq '.assets[] | "\(.name) \(.size)"'

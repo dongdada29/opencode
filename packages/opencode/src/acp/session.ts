@@ -1,6 +1,6 @@
 import { RequestError, type McpServer } from "@agentclientprotocol/sdk"
 import type { ACPSessionState } from "./types"
-import { Log } from "@/util/log"
+import { Log } from "@/util"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
 
 const log = Log.create({ service: "acp-session-manager" })
@@ -17,26 +17,14 @@ export class ACPSessionManager {
     return this.sessions.get(sessionId)
   }
 
-  async create(
-    cwd: string,
-    mcpServers: McpServer[],
-    model?: ACPSessionState["model"],
-    systemPrompt?: ACPSessionState["systemPrompt"],
-  ): Promise<ACPSessionState> {
-    log.info("session.context", {
-      type: "New Session",
-      cwd,
-      mcpServers,
-      model,
-      systemPrompt,
-    })
-    const createPayload: Parameters<typeof this.sdk.session.create>[0] & { source?: "acp" } = {
-      title: `ACP Session ${crypto.randomUUID()}`,
-      directory: cwd,
-      source: "acp",
-    }
+  async create(cwd: string, mcpServers: McpServer[], model?: ACPSessionState["model"]): Promise<ACPSessionState> {
     const session = await this.sdk.session
-      .create(createPayload, { throwOnError: true })
+      .create(
+        {
+          directory: cwd,
+        },
+        { throwOnError: true },
+      )
       .then((x) => x.data!)
 
     const sessionId = session.id
@@ -48,9 +36,8 @@ export class ACPSessionManager {
       mcpServers,
       createdAt: new Date(),
       model: resolvedModel,
-      systemPrompt,
     }
-    log.info("session.create.result", { state })
+    log.info("creating_session", { state })
 
     this.sessions.set(sessionId, state)
     return state
@@ -62,13 +49,6 @@ export class ACPSessionManager {
     mcpServers: McpServer[],
     model?: ACPSessionState["model"],
   ): Promise<ACPSessionState> {
-    log.info("session.context", {
-      type: "Load Session",
-      sessionId,
-      cwd,
-      mcpServers,
-      model,
-    })
     const session = await this.sdk.session
       .get(
         {
@@ -88,7 +68,7 @@ export class ACPSessionManager {
       createdAt: new Date(session.time.created),
       model: resolvedModel,
     }
-    log.info("session.load.result", { state })
+    log.info("loading_session", { state })
 
     this.sessions.set(sessionId, state)
     return state
@@ -111,6 +91,18 @@ export class ACPSessionManager {
   setModel(sessionId: string, model: ACPSessionState["model"]) {
     const session = this.get(sessionId)
     session.model = model
+    this.sessions.set(sessionId, session)
+    return session
+  }
+
+  getVariant(sessionId: string) {
+    const session = this.get(sessionId)
+    return session.variant
+  }
+
+  setVariant(sessionId: string, variant?: string) {
+    const session = this.get(sessionId)
+    session.variant = variant
     this.sessions.set(sessionId, session)
     return session
   }
