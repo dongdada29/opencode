@@ -73,9 +73,17 @@ echo "✅ Updated $PACKAGE_JSON to version $NEW_VERSION"
 echo "📝 Please ensure you have updated CHANGELOG-nuwaxcode.md"
 read -p "Press Enter to continue if changelog is updated (or Ctrl+C to abort)..."
 
+# 强制重建二进制，避免“package.json 已升级，但二进制仍是旧版本”的错配。
+echo "🏗️  Rebuilding binaries for version $NEW_VERSION..."
+cd packages/opencode
+OPENCODE_VERSION="$NEW_VERSION" OPENCODE_CHANNEL="${NPM_DIST_TAG}" bun run script/build.ts
+
+# 发布前一致性闸门：主包、optionalDependencies、dist 二进制、本地 smoke 版本必须完全一致。
+echo "🧪 Running pre-release version consistency checks..."
+bun run script/check-version-consistency.ts --phase pre --version "$NEW_VERSION"
+
 # Run publish
 echo "🚀 Publishing to NPM (dist-tag: ${NPM_DIST_TAG})..."
-cd packages/opencode
 
 # 清理上一次发布遗留的聚合包目录（dist/nuwaxcode）。
 # publish.ts 会先扫描 dist/*/package.json 再重写该目录；
@@ -117,12 +125,12 @@ fi
 # Execute publish
 eval $PUBLISH_CMD
 
-# 确认 registry 上主包声明的 optional 子包均已存在（避免「主包已发、子包缺失」）
+# 发布后一致性闸门：registry 主包与 optional 完整，且安装态 CLI 版本等于发布版本。
 if [ "${SKIP_REGISTRY_VERIFY:-}" = "1" ]; then
   echo "⏭️  SKIP_REGISTRY_VERIFY=1，跳过 npm optional 完整性校验"
 else
-  echo "🔍 校验 npm：nuwaxcode@${NEW_VERSION} 与全部 optional 子包…"
-  bun run script/verify-registry-complete.ts "$NEW_VERSION"
+  echo "🔍 Running post-release version consistency checks..."
+  bun run script/check-version-consistency.ts --phase post --version "$NEW_VERSION"
 fi
 
 echo "✅ Release $NEW_VERSION completed successfully!"

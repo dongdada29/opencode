@@ -5,6 +5,14 @@
 - **Release Workflow**:
   1. **Changelog**: Update `CHANGELOG-nuwaxcode.md` with new version details.
   2. **Bump Version**: Update `packages/opencode/package.json` version field.
+  2.1 **Version Consistency Rule (Mandatory)**:
+     - `packages/opencode/package.json` is the only version source of truth.
+     - All `optionalDependencies` entries matching `nuwaxcode-*` must equal the same version.
+     - Rebuild binaries before publish, then run:
+       - `bun run script/check-version-consistency.ts --phase pre --version <version>`
+     - After publish, run:
+       - `bun run script/check-version-consistency.ts --phase post --version <version>`
+     - Any mismatch must fail the release immediately.
   3. **Commit & Push**: Push changes to `feat/nuwaxcode` branch.
   4. **Tag & Trigger CI**: `git tag v<version> && git push origin v<version>`
      - CI (`.github/workflows/build-release.yml`) builds all 11 platform targets on a single ubuntu-24.04 runner via Bun cross-compilation.

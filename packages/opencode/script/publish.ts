@@ -7,6 +7,16 @@ import { fileURLToPath } from "url"
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
+// 单一版本源规则：发布脚本上下文版本必须与 package.json 完全一致。
+// 这样可以防止环境变量或分支上下文误导导致“主包/二进制版本错位发布”。
+if (pkg.version !== Script.version) {
+  console.error(
+    `Version mismatch: package.json=${pkg.version}, publish-context=${Script.version}. ` +
+      "Please sync package.json version before publish.",
+  )
+  process.exit(1)
+}
+
 async function published(name: string, version: string) {
   return (await $`npm view ${name}@${version} version`.nothrow()).exitCode === 0
 }

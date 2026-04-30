@@ -348,7 +348,7 @@
     },
     "packages/opencode": {
       "name": "nuwaxcode",
-      "version": "1.1.90",
+      "version": "1.1.93",
       "bin": {
         "nuwaxcode": "./bin/nuwaxcode",
       },
