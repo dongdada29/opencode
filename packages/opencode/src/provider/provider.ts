@@ -1207,7 +1207,19 @@ const layer: Layer.Layer<
             return
           }
           const match = database[providerID]
-          if (!match) return
+          if (!match) {
+            if (provider.id) {
+              providers[providerID] = {
+                id: ProviderID.make(providerID),
+                name: provider.name ?? String(providerID),
+                source: provider.source ?? "custom",
+                env: provider.env ?? [],
+                options: provider.options ?? {},
+                models: provider.models ?? {},
+              }
+            }
+            return
+          }
           // @ts-expect-error
           providers[providerID] = mergeDeep(match, provider)
         }
