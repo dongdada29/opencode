@@ -7,6 +7,16 @@ import { fileURLToPath } from "url"
 const dir = fileURLToPath(new URL("..", import.meta.url))
 process.chdir(dir)
 
+// 单一版本源规则：发布脚本上下文版本必须与 package.json 完全一致。
+// 这样可以防止环境变量或分支上下文误导导致“主包/二进制版本错位发布”。
+if (pkg.version !== Script.version) {
+  console.error(
+    `Version mismatch: package.json=${pkg.version}, publish-context=${Script.version}. ` +
+      "Please sync package.json version before publish.",
+  )
+  process.exit(1)
+}
+
 async function published(name: string, version: string) {
   return (await $`npm view ${name}@${version} version`.nothrow()).exitCode === 0
 }
@@ -19,27 +29,43 @@ async function publish(dir: string, name: string, version: string) {
     console.log(`already published ${name}@${version}`)
     return
   }
+  // 避免目录中历史打包产物干扰本次发布（npm publish *.tgz 期望单一目标包）。
+  // Bun shell 对未匹配的 glob 会报错，这里改为通过 bash 执行，确保“无 tgz 可删”也不失败。
+  await $`bash -lc "rm -f ./*.tgz"`.cwd(dir)
   await $`bun pm pack`.cwd(dir)
   await $`npm publish *.tgz --access public --tag ${Script.channel}`.cwd(dir)
 }
 
 const binaries: Record<string, string> = {}
 for (const filepath of new Bun.Glob("*/package.json").scanSync({ cwd: "./dist" })) {
-  const pkg = await Bun.file(`./dist/${filepath}`).json()
-  binaries[pkg.name] = pkg.version
+  const packageJsonPath = `./dist/${filepath}`
+  const distPkg = await Bun.file(packageJsonPath).json()
+  // 统一使用本次发布版本，确保所有平台二进制子包与主包版本号一致。
+  // 这允许我们在“主包修复补丁”场景下，显式推进整套 npm 包版本（例如 1.1.85 全量对齐）。
+  if (distPkg.version !== Script.version) {
+    distPkg.version = Script.version
+    await Bun.file(packageJsonPath).write(JSON.stringify(distPkg, null, 2) + "\n")
+  }
+  binaries[distPkg.name] = Script.version
 }
 console.log("binaries", binaries)
-const version = Object.values(binaries)[0]
+// 主包版本应由发布上下文（Script.version）决定，而不是被 dist 二进制版本反向驱动。
+// 这样当仅修复 JS/postinstall 逻辑时，可以发布新的主包版本并继续复用已发布的二进制包版本。
+const version = Script.version
 
 await $`mkdir -p ./dist/${pkg.name}`
 await $`cp -r ./bin ./dist/${pkg.name}/bin`
+// 始终提供实体入口 bin/nuwaxcode，避免依赖软链或不存在的文件映射。
+await $`cp ./dist/${pkg.name}/bin/opencode ./dist/${pkg.name}/bin/${pkg.name}`
 await $`cp ./script/postinstall.mjs ./dist/${pkg.name}/postinstall.mjs`
 await Bun.file(`./dist/${pkg.name}/LICENSE`).write(await Bun.file("../../LICENSE").text())
 
 await Bun.file(`./dist/${pkg.name}/package.json`).write(
   JSON.stringify(
     {
-      name: pkg.name + "-ai",
+      // 发布主聚合包（nuwaxcode），保持与历史发版行为一致。
+      // optionalDependencies 继续引用各平台二进制子包（nuwaxcode-*）。
+      name: pkg.name,
       bin: {
         [pkg.name]: `./bin/${pkg.name}`,
       },
@@ -59,15 +85,22 @@ const tasks = Object.entries(binaries).map(async ([name]) => {
   await publish(`./dist/${name}`, name, binaries[name])
 })
 await Promise.all(tasks)
-await publish(`./dist/${pkg.name}`, `${pkg.name}-ai`, version)
+await publish(`./dist/${pkg.name}`, `${pkg.name}`, version)
 
 const image = "ghcr.io/anomalyco/opencode"
 const platforms = "linux/amd64,linux/arm64"
 const tags = [`${image}:${version}`, `${image}:${Script.channel}`]
 const tagFlags = tags.flatMap((t) => ["-t", t])
+// 本地/紧急发版场景下，允许只执行 npm 发布，跳过 docker/aur/homebrew 这类
+// 依赖外部守护进程或凭据的后续步骤，避免因为环境问题阻塞 npm 交付。
+const skipDockerPublish = process.env.SKIP_DOCKER_PUBLISH === "1"
 
 // registries
 if (!Script.preview) {
+  if (skipDockerPublish) {
+    console.log("SKIP_DOCKER_PUBLISH=1，跳过 docker 与后续镜像/仓库发布步骤。")
+    process.exit(0)
+  }
   await $`docker buildx build --platform ${platforms} ${tagFlags} --push .`
   // Calculate SHA values
   const arm64Sha = await $`sha256sum ./dist/opencode-linux-arm64.tar.gz | cut -d' ' -f1`.text().then((x) => x.trim())

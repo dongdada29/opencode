@@ -236,6 +236,10 @@ for (const item of targets) {
   }
 
   await $`rm -rf ./dist/${name}/bin/tui`
+
+  // Copy bundled models.json next to binary for runtime access
+  await $`mkdir -p dist/${name}/bin/assets`
+  await $`cp assets/models.json dist/${name}/bin/assets/models.json`
   await Bun.file(`dist/${name}/package.json`).write(
     JSON.stringify(
       {

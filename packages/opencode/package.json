@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.14.28",
+  "version": "1.1.95",
   "name": "nuwaxcode",
   "type": "module",
   "license": "MIT",
@@ -18,7 +18,7 @@
     "db": "bun drizzle-kit"
   },
   "bin": {
-    "opencode": "./bin/opencode"
+    "nuwaxcode": "./bin/nuwaxcode"
   },
   "exports": {
     "./*": "./src/*.ts"
