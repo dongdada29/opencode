@@ -202,7 +202,7 @@ nuwaxcode run "hello"
 ### 日志内容示例
 
 ```text
-[2026-01-20T08:50:48.712Z] INFO  llm.prompt content="You are opencode, an interactive CLI tool..."
+[2026-01-20T08:50:48.712Z] INFO  llm.prompt content="You are an interactive CLI tool..."
 
 [2026-01-20T08:50:48.713Z] INFO  llm.config provider=opencode model=big-pickle temperature=N/A options={"reasoningEffort":"minimal"}
 
