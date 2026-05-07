@@ -1,4 +1,5 @@
 name: build-release
+run-name: build-release ${{ inputs.version && format('v{0}', inputs.version) || github.ref_name }}
 
 on:
   push:
@@ -7,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (e.g. 1.1.66)"
+        description: "Release version (e.g. 1.1.95)"
         required: false
         type: string
 
@@ -71,12 +72,15 @@ jobs:
       - name: Create archives
         run: |
           cd packages/opencode
+          # 统一从前一步解析出的版本号命名产物，避免不同版本构建时文件名冲突。
+          VERSION="${{ steps.version.outputs.version }}"
+          # 归档名称示例：nuwaxcode-darwin-arm64-v1.1.95.tar.gz
           for dir in dist/*/; do
             name=$(basename "$dir")
             echo "--- Archiving $name ---"
-            tar czf "${{ github.workspace }}/${name}.tar.gz" -C "${dir}bin" .
+            tar czf "${{ github.workspace }}/${name}-v${VERSION}.tar.gz" -C "${dir}bin" .
             if [[ "$name" == *windows* ]]; then
-              (cd "${dir}bin" && zip -r "${{ github.workspace }}/${name}.zip" .)
+              (cd "${dir}bin" && zip -r "${{ github.workspace }}/${name}-v${VERSION}.zip" .)
             fi
           done
 
@@ -86,7 +90,8 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: all-platforms
+          # 在 Actions 页面直接看到版本号，便于区分同一分支多次构建结果。
+          name: all-platforms-v${{ steps.version.outputs.version }}
           retention-days: 1
           path: |
             ${{ github.workspace }}/*.tar.gz
