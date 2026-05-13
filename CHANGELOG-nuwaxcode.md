@@ -2,6 +2,14 @@
 
 本文档总结了 `feat/nuwaxcode` 分支相对于主分支的主要更改。
 
+## v1.1.98 (2026-05-13)
+
+### 修复
+
+- **ACP**: 恢复 `session/new` 时 `params._meta.systemPrompt` 的读取与保存，并在普通 `prompt` 调用中映射为 `session.prompt` 的 `system` 字段（与历史 claude-code-acp 约定及先前 1.1.x 行为一致）。
+
+---
+
 ## v1.1.68 (2026-03-31)
 
 ### 🐛 修复
