@@ -17,7 +17,16 @@ export class ACPSessionManager {
     return this.sessions.get(sessionId)
   }
 
-  async create(cwd: string, mcpServers: McpServer[], model?: ACPSessionState["model"]): Promise<ACPSessionState> {
+  /**
+   * 创建 ACP 侧会话镜像，并可选保存客户端在 `session/new` 里通过 `_meta.systemPrompt` 传入的自定义系统提示。
+   * 该字段不会写入 OpenCode session 实体，仅在 ACP 桥接层保留，供后续 `sdk.session.prompt` 注入 `system`。
+   */
+  async create(
+    cwd: string,
+    mcpServers: McpServer[],
+    model?: ACPSessionState["model"],
+    systemPrompt?: ACPSessionState["systemPrompt"],
+  ): Promise<ACPSessionState> {
     const session = await this.sdk.session
       .create(
         {
@@ -36,6 +45,7 @@ export class ACPSessionManager {
       mcpServers,
       createdAt: new Date(),
       model: resolvedModel,
+      systemPrompt,
     }
     log.info("creating_session", { state })
 

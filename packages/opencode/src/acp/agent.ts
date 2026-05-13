@@ -36,7 +36,7 @@ import { pathToFileURL } from "url"
 import { Filesystem } from "../util"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { ACPSessionManager } from "./session"
-import type { ACPConfig } from "./types"
+import type { ACPConfig, ACPSessionState } from "./types"
 import { ModelsDev, Provider } from "../provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { Agent as AgentModule } from "../agent/agent"
@@ -590,11 +590,19 @@ export class Agent implements ACPAgent {
     try {
       const model = await defaultModel(this.config, directory)
 
-      // Store ACP session state
-      const state = await this.sessionManager.create(params.cwd, params.mcpServers, model)
+      // 从 ACP `session/new` 的 `_meta` 读取自定义 system prompt（Nuwax 扩展；依赖该字段的 ACP 客户端与 claude-code-acp 行为对齐）
+      const systemPrompt = (params._meta as { systemPrompt?: ACPSessionState["systemPrompt"] } | undefined)
+        ?.systemPrompt
+
+      // Store ACP session state（含可选 systemPrompt，供后续 prompt 注入）
+      const state = await this.sessionManager.create(params.cwd, params.mcpServers, model, systemPrompt)
       const sessionId = state.id
 
-      log.info("creating_session", { sessionId, mcpServers: params.mcpServers.length })
+      log.info("creating_session", {
+        sessionId,
+        mcpServers: params.mcpServers.length,
+        hasSystemPrompt: !!systemPrompt,
+      })
 
       const load = await this.loadSessionMode({
         cwd: directory,
@@ -1483,6 +1491,12 @@ export class Agent implements ACPAgent {
     })
 
     if (!cmd) {
+      // 将 newSession 阶段保存的 `_meta.systemPrompt` 映射为 HTTP `session.prompt` 的 `system`（见 SessionPrompt / llm 合并逻辑）
+      const system =
+        typeof session.systemPrompt === "string"
+          ? session.systemPrompt
+          : session.systemPrompt?.append
+
       const response = await this.sdk.session.prompt({
         sessionID,
         model: {
@@ -1493,6 +1507,7 @@ export class Agent implements ACPAgent {
         parts,
         agent,
         directory,
+        ...(system !== undefined && system !== "" ? { system } : {}),
       })
       const msg = response.data?.info
 
