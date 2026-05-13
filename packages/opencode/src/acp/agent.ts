@@ -36,7 +36,7 @@ import { pathToFileURL } from "url"
 import { Filesystem } from "../util"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { ACPSessionManager } from "./session"
-import type { ACPConfig, ACPSessionState } from "./types"
+import type { ACPConfig, ACPSystemPromptMeta } from "./types"
 import { ModelsDev, Provider } from "../provider"
 import { ModelID, ProviderID } from "../provider/schema"
 import { Agent as AgentModule } from "../agent/agent"
@@ -63,6 +63,52 @@ const MODEL_CACHE_TTL = 30_000
 const modelCache = new Map<string, { model: { providerID: ProviderID; modelID: ModelID }; expires: number }>()
 
 const log = Log.create({ service: "acp-agent" })
+
+type NewSessionSystemPromptSource =
+  | "params._meta.systemPrompt"
+  | "params._meta.system_prompt"
+  | "params.systemPrompt"
+  | "params.system_prompt"
+  | "none"
+
+function normalizeSystemPrompt(value: unknown): ACPSystemPromptMeta | undefined {
+  if (typeof value === "string") return value
+  if (!value || typeof value !== "object") return
+  const append = (value as Record<string, unknown>)["append"]
+  if (typeof append === "string") return { append }
+}
+
+function resolveSystemPromptFromNewSession(params: NewSessionRequest): {
+  systemPrompt?: ACPSystemPromptMeta
+  source: NewSessionSystemPromptSource
+} {
+  const root = params as unknown as Record<string, unknown>
+  const metaRaw = root["_meta"]
+  const meta =
+    metaRaw && typeof metaRaw === "object" && !Array.isArray(metaRaw)
+      ? (metaRaw as Record<string, unknown>)
+      : undefined
+
+  const candidates: Array<{ source: Exclude<NewSessionSystemPromptSource, "none">; value: unknown }> = [
+    { source: "params._meta.systemPrompt", value: meta?.["systemPrompt"] },
+    { source: "params._meta.system_prompt", value: meta?.["system_prompt"] },
+    { source: "params.systemPrompt", value: root["systemPrompt"] },
+    { source: "params.system_prompt", value: root["system_prompt"] },
+  ]
+
+  for (const candidate of candidates) {
+    if (candidate.value === undefined) continue
+    const normalized = normalizeSystemPrompt(candidate.value)
+    if (normalized) {
+      return {
+        source: candidate.source,
+        systemPrompt: normalized,
+      }
+    }
+    return { source: candidate.source }
+  }
+  return { source: "none" }
+}
 
 async function getContextLimit(
   sdk: OpencodeClient,
@@ -590,9 +636,11 @@ export class Agent implements ACPAgent {
     try {
       const model = await defaultModel(this.config, directory)
 
-      // 从 ACP `session/new` 的 `_meta` 读取自定义 system prompt（Nuwax 扩展；依赖该字段的 ACP 客户端与 claude-code-acp 行为对齐）
-      const systemPrompt = (params._meta as { systemPrompt?: ACPSessionState["systemPrompt"] } | undefined)
-        ?.systemPrompt
+      // 为了兼容不同客户端实现，这里同时接受 camelCase/snake_case 以及 _meta/顶层两种形态。
+      // 这样即使上游字段命名与约定有偏差，也能在日志中明确展示“取到了哪个来源”。
+      const resolvedSystemPrompt = resolveSystemPromptFromNewSession(params)
+      const systemPrompt = resolvedSystemPrompt.systemPrompt
+      const hasSystemPrompt = systemPrompt !== undefined
 
       // Store ACP session state（含可选 systemPrompt，供后续 prompt 注入）
       const state = await this.sessionManager.create(params.cwd, params.mcpServers, model, systemPrompt)
@@ -601,7 +649,8 @@ export class Agent implements ACPAgent {
       log.info("creating_session", {
         sessionId,
         mcpServers: params.mcpServers.length,
-        hasSystemPrompt: !!systemPrompt,
+        systemPromptSource: resolvedSystemPrompt.source,
+        hasSystemPrompt,
       })
 
       const load = await this.loadSessionMode({

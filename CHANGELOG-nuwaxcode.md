@@ -2,6 +2,15 @@
 
 本文档总结了 `feat/nuwaxcode` 分支相对于主分支的主要更改。
 
+## v1.1.99 (2026-05-13)
+
+### 🐛 修复
+
+- **ACP / System Prompt**: 增加 `session/new` 的 `systemPrompt` 多来源兼容解析（`_meta.systemPrompt`、`_meta.system_prompt`、顶层同名字段），避免不同客户端字段命名差异导致 system prompt 丢失。
+- **ACP / 日志**: 保留轻量关键日志（来源 + 是否命中），避免高频/重日志影响主流程可读性。
+
+---
+
 ## v1.1.98 (2026-05-13)
 
 ### 修复

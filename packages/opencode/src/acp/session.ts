@@ -47,7 +47,10 @@ export class ACPSessionManager {
       model: resolvedModel,
       systemPrompt,
     }
-    log.info("creating_session", { state })
+    log.info("creating_session", {
+      sessionId,
+      hasSystemPrompt: systemPrompt !== undefined,
+    })
 
     this.sessions.set(sessionId, state)
     return state
