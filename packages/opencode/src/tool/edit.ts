@@ -16,6 +16,7 @@ import { Format } from "../format"
 import { Instance } from "../project/instance"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
+import { assertSandboxWritableEffect } from "@/sandbox"
 import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import * as Bom from "@/util/bom"
 
@@ -80,6 +81,7 @@ export const EditTool = Tool.define(
             ? params.filePath
             : path.join(Instance.directory, params.filePath)
           yield* assertExternalDirectoryEffect(ctx, filePath)
+          yield* assertSandboxWritableEffect(filePath)
 
           let diff = ""
           let contentOld = ""
@@ -204,7 +206,7 @@ export const EditTool = Tool.define(
             title: `${path.relative(Instance.worktree, filePath)}`,
             output,
           }
-        }),
+        }).pipe(Effect.orDie),
     }
   }),
 )

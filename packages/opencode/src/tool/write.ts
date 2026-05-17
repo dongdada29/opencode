@@ -13,6 +13,7 @@ import { AppFileSystem } from "@opencode-ai/core/filesystem"
 import { Instance } from "../project/instance"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
+import { assertSandboxWritableEffect } from "@/sandbox"
 import * as Bom from "@/util/bom"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
@@ -41,6 +42,7 @@ export const WriteTool = Tool.define(
             ? params.filePath
             : path.join(Instance.directory, params.filePath)
           yield* assertExternalDirectoryEffect(ctx, filepath)
+          yield* assertSandboxWritableEffect(filepath)
 
           const exists = yield* fs.existsSafe(filepath)
           const source = exists ? yield* Bom.readFile(fs, filepath) : { bom: false, text: "" }

@@ -42,6 +42,8 @@ import { ConfigProvider } from "./provider"
 import { ConfigServer } from "./server"
 import { ConfigSkills } from "./skills"
 import { ConfigVariable } from "./variable"
+import { ConfigSandbox } from "./sandbox"
+import { parseNuwaxAgentSandboxConfig } from "@/sandbox/env"
 import { Npm } from "@opencode-ai/core/npm"
 
 const log = Log.create({ service: "config" })
@@ -196,6 +198,9 @@ export const Info = Schema.Struct({
   }),
   layout: Schema.optional(ConfigLayout.Layout).annotate({ description: "@deprecated Always uses stretch layout." }),
   permission: Schema.optional(ConfigPermission.Info),
+  sandbox: Schema.optional(ConfigSandbox.Info).annotate({
+    description: "Execution sandbox for built-in write/edit/bash tools",
+  }),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
   enterprise: Schema.optional(
     Schema.Struct({
@@ -692,6 +697,14 @@ export const layer = Layer.effect(
         }
         if (Flag.OPENCODE_DISABLE_PRUNE) {
           result.compaction = { ...result.compaction, prune: false }
+        }
+
+        const forcedSandbox = parseNuwaxAgentSandboxConfig()
+        if (forcedSandbox) {
+          result.sandbox = forcedSandbox
+          log.info("applied NUWAX_AGENT_SANDBOX_CONFIG", {
+            sandbox_mode: result.sandbox.sandbox_mode,
+          })
         }
 
         return {

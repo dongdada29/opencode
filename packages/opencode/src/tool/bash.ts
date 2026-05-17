@@ -22,6 +22,7 @@ import { Effect, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { InstanceState } from "@/effect"
+import { getSandboxPolicySync, runBashViaSandboxHelper, shouldUseSandboxHelper } from "@/sandbox"
 
 const MAX_METADATA_LENGTH = 30_000
 const DEFAULT_TIMEOUT = Flag.OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS || 2 * 60 * 1000
@@ -416,6 +417,47 @@ export const BashTool = Tool.define(
       },
       ctx: Tool.Context,
     ) {
+      const policy = getSandboxPolicySync()
+      if (shouldUseSandboxHelper(policy)) {
+        const limits = yield* trunc.limits()
+        const result = yield* runBashViaSandboxHelper({
+          policy,
+          shell: input.shell,
+          command: input.command,
+          cwd: input.cwd,
+          timeout: input.timeout,
+        }).pipe(
+          Effect.mapError((cause) => (cause instanceof Error ? cause : new Error(String(cause)))),
+        )
+
+        const parts: string[] = []
+        if (result.stdout) parts.push(result.stdout)
+        if (result.stderr) parts.push(result.stderr)
+        let output = parts.join("\n") || "(no output)"
+        const meta: string[] = []
+        if (result.timedOut) {
+          meta.push(
+            `bash tool terminated command after exceeding timeout ${input.timeout} ms. If this command is expected to take longer and is not waiting for interactive input, retry with a larger timeout value in milliseconds.`,
+          )
+        }
+        if (meta.length > 0) {
+          output += "\n\n<bash_metadata>\n" + meta.join("\n") + "\n</bash_metadata>"
+        }
+
+        const end = tail(output, limits.maxLines, limits.maxBytes)
+        const previewOut = preview(end.text)
+        return {
+          title: input.description,
+          metadata: {
+            output: previewOut,
+            exit: result.exitCode,
+            description: input.description,
+            truncated: end.cut,
+          },
+          output: end.text,
+        }
+      }
+
       const limits = yield* trunc.limits()
       const keep = limits.maxBytes * 2
       let full = ""
@@ -611,7 +653,7 @@ export const BashTool = Tool.define(
                   description: params.description,
                 },
                 ctx,
-              )
+              ).pipe(Effect.orDie)
             }),
         }
       })
