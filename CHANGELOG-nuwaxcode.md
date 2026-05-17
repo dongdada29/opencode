@@ -9,7 +9,6 @@
 ### ✨ 新特性
 
 - **Sandbox（≥1.2.0）**: 原生 OpenCode `config.sandbox`（strict / compat / permissive），工具层同步 path guard，与 Nuwaclaw Electron 客户端对接。
-- **CI**: Release 完成后可选 `repository_dispatch` 触发 Nuwaclaw `prerelease-v0.11.29` beta 构建。
 
 ### 🐛 修复
 
