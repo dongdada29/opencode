@@ -2,6 +2,21 @@
 
 本文档总结了 `feat/nuwaxcode` 分支相对于主分支的主要更改。
 
+## v1.2.1 (2026-05-17)
+
+> 仅 GitHub Release（`git tag v1.2.1` → `build-release.yml`），**不发 npm**。
+
+### ✨ 新特性
+
+- **Sandbox（≥1.2.0）**: 原生 OpenCode `config.sandbox`（strict / compat / permissive），工具层同步 path guard，与 Nuwaclaw Electron 客户端对接。
+- **CI**: Release 完成后可选 `repository_dispatch` 触发 Nuwaclaw `prerelease-v0.11.29` beta 构建。
+
+### 🐛 修复
+
+- 避免向旧版注入 `OPENCODE_CONFIG_CONTENT.sandbox` 导致 `Unrecognized key: sandbox` 崩溃。
+
+---
+
 ## v1.1.99 (2026-05-13)
 
 ### 🐛 修复
