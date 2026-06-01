@@ -2,6 +2,18 @@
 
 本文档总结了 `feat/nuwaxcode` 分支相对于主分支的主要更改。
 
+## v1.2.3 (2026-06-01)
+
+### 🔄 发版 / CI
+
+- **build-release**: 仅 `push tag v*` 触发；构建前拉取 models.dev；npm 发布与校验统一走 `scripts/release-publish.sh`（与本地 `release.sh` 一致）。
+
+### 🐛 修复
+
+- 延续 v1.2.2：无 AVX2 机器 CLI 静默退出、nuwaxcode-* 包名与 baseline 解析（见 v1.2.2）。
+
+---
+
 ## v1.2.2 (2026-06-01)
 
 ### 🐛 修复
