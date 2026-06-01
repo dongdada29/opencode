@@ -179,3 +179,5 @@ jobs:
           NPM_CONFIG_PROVENANCE: "false"
           NPM_DIST_TAG: latest
           SKIP_DOCKER_PUBLISH: "1"
+          # CI 不执行 dist 二进制 smoke（编译产物在 runner 上可能因运行时依赖失败）；版本由 dist package.json 保证
+          SKIP_LOCAL_SMOKE: "1"

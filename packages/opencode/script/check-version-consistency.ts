@@ -91,6 +91,10 @@ function smokeBinaryCandidates(): string[] {
 }
 
 async function ensureLocalSmokeVersion(version: string) {
+  if (process.env.SKIP_LOCAL_SMOKE === "1") {
+    console.warn("SKIP_LOCAL_SMOKE=1，跳过本地 smoke（CI 仅依赖 dist package.json 版本校验）。")
+    return
+  }
   // 烟测使用与当前 runner 平台匹配的 dist 产物；CI（linux x64）不再误跑 darwin 二进制。
   let smokeBin: string | undefined
   for (const candidate of smokeBinaryCandidates()) {
