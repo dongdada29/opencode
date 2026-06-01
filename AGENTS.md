@@ -14,11 +14,10 @@
        - `bun run script/check-version-consistency.ts --phase post --version <version>`
      - Any mismatch must fail the release immediately.
   3. **Commit & Push**: Push changes to `feat/nuwaxcode` branch.
-  4. **Tag & Trigger CI**: `git tag v<version> && git push origin v<version>`
-     - CI (`.github/workflows/build-release.yml`) builds all 11 platform targets on a single ubuntu-24.04 runner via Bun cross-compilation.
-     - Produces 13 archives: darwin (arm64, x64, x64-baseline), linux (arm64, x64, x64-baseline, arm64-musl, x64-musl, x64-baseline-musl), windows (x64, x64-baseline, each with .tar.gz + .zip).
-     - Auto-creates GitHub Release and uploads all assets.
-     - **npm**: same workflow runs `publish-npm` job (`script/publish.ts` with `SKIP_DOCKER_PUBLISH=1`). Requires repo secret `NPM_TOKEN` (npm automation token with publish permission).
-  5. **Verify**: Check release at `https://github.com/nuwax-ai/nuwaxcode/releases/tag/v<version>` and `npm view nuwaxcode@<version> version`.
+  4. **Tag & Trigger CI**（仅此方式触发，无 workflow_dispatch）: `git tag v<version> && git push origin v<version>`
+     - 发版前在仓库内完成：`CHANGELOG-nuwaxcode.md`、`packages/opencode/package.json` 版本号。
+     - CI [`.github/workflows/build-release.yml`](.github/workflows/build-release.yml)：拉取 models.dev → 全平台构建 → GitHub Release → npm。
+     - npm 发布与校验与 [`scripts/release-publish.sh`](scripts/release-publish.sh) 一致（`check-version-consistency` pre/post、清理 `dist/nuwaxcode`）。需配置 secret `NPM_TOKEN`。
+  5. **Verify**: `https://github.com/nuwax-ai/nuwaxcode/releases/tag/v<version>` 与 `npm view nuwaxcode@<version> version`。
   6. **Electron Integration**: Update `NUWAXCODE_VERSION` in Electron client's `scripts/prepare/prepare-nuwaxcode.js` and `installVersion` in `src/main/services/system/dependencies.ts`, then run `node scripts/prepare/prepare-nuwaxcode.js`.
-  7. **npm publish (local fallback)**: `./release.sh <new_version> [otp|--no-otp]` if CI npm job is skipped or failed.
+  7. **本地全量发版（含构建）**: `./release.sh <version> [otp|--no-otp]`；仅 npm 发布段：`./scripts/release-publish.sh <version>`（需已存在 `packages/opencode/dist`）。

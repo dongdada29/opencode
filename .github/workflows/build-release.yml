@@ -1,26 +1,11 @@
 name: build-release
-run-name: build-release ${{ inputs.version && format('v{0}', inputs.version) || github.ref_name }}
+run-name: build-release ${{ github.ref_name }}
 
+# 仅通过 push tag（如 v1.2.2）触发；发版前请在仓库内 bump 版本并更新 CHANGELOG。
 on:
   push:
     tags:
       - "v*"
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Release version (e.g. 1.2.2)"
-        required: false
-        type: string
-      publish_npm:
-        description: "Publish nuwaxcode packages to npm after build"
-        required: false
-        type: boolean
-        default: true
-      skip_registry_verify:
-        description: "Skip post-publish npm registry verification"
-        required: false
-        type: boolean
-        default: false
 
 concurrency: build-release-${{ github.ref }}
 
@@ -53,38 +38,38 @@ jobs:
             fi
           done
 
-      # 与 .husky/pre-push 一致：发版前从 models.dev 拉取最新 models.json 再打进二进制
       - name: Update bundled models.json
         run: bun run scripts/update-models.ts
 
-      - name: Read version
+      - name: Read version from tag
         id: version
         run: |
-          if [ -n "${{ inputs.version }}" ]; then
-            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            TAG="${GITHUB_REF#refs/tags/}"
-            echo "version=${TAG#v}" >> $GITHUB_OUTPUT
-          fi
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "version=${TAG#v}" >> $GITHUB_OUTPUT
 
       - name: Sync package.json version
         run: |
           VERSION="${{ steps.version.outputs.version }}"
+          export VERSION
           bun -e "
             const fs = require('fs');
             const path = 'packages/opencode/package.json';
             const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
             pkg.version = process.env.VERSION;
+            if (pkg.optionalDependencies) {
+              for (const key of Object.keys(pkg.optionalDependencies)) {
+                if (key.startsWith('nuwaxcode-')) pkg.optionalDependencies[key] = process.env.VERSION;
+              }
+            }
             fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
           "
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
 
       - name: Build all targets
         working-directory: packages/opencode
         run: bun run script/build.ts
         env:
           OPENCODE_VERSION: ${{ steps.version.outputs.version }}
+          OPENCODE_CHANNEL: latest
 
       - name: List dist directories
         run: ls -la packages/opencode/dist/
@@ -112,7 +97,7 @@ jobs:
           done
 
       - name: List archives
-        run: ls -lh ${{ github.workspace }}/*.tar.gz ${{ github.workspace }}/*.zip
+        run: ls -lh ${{ github.workspace }}/*.tar.gz ${{ github.workspace }}/*.zip 2>/dev/null || true
 
       - name: Upload release archives
         uses: actions/upload-artifact@v4
@@ -132,7 +117,7 @@ jobs:
 
   release:
     needs: build
-    if: always() && needs.build.result == 'success'
+    if: needs.build.result == 'success'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -169,14 +154,7 @@ jobs:
 
   publish-npm:
     needs: build
-    if: >-
-      always() &&
-      needs.build.result == 'success' &&
-      github.repository == 'nuwax-ai/nuwaxcode' &&
-      (
-        (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
-        inputs.publish_npm == true
-      )
+    if: needs.build.result == 'success' && github.repository == 'nuwax-ai/nuwaxcode'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -194,43 +172,10 @@ jobs:
           name: opencode-dist-v${{ needs.build.outputs.version }}
           path: packages/opencode/dist
 
-      - name: Sync package.json version
-        run: |
-          VERSION="${{ needs.build.outputs.version }}"
-          bun -e "
-            const fs = require('fs');
-            const path = 'packages/opencode/package.json';
-            const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
-            pkg.version = process.env.VERSION;
-            fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
-          "
-        env:
-          VERSION: ${{ needs.build.outputs.version }}
-
-      - name: Remove stale aggregator dist
-        working-directory: packages/opencode
-        run: rm -rf ./dist/nuwaxcode
-
-      - name: Pre-publish version checks
-        working-directory: packages/opencode
-        run: bun run script/check-version-consistency.ts --phase pre --version "${{ needs.build.outputs.version }}"
-
-      - name: Publish to npm
-        working-directory: packages/opencode
-        run: bun run script/publish.ts
+      - name: Publish to npm (release-publish.sh)
+        run: ./scripts/release-publish.sh "${{ needs.build.outputs.version }}"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "false"
-          OPENCODE_VERSION: ${{ needs.build.outputs.version }}
-          OPENCODE_CHANNEL: latest
-          OPENCODE_RELEASE: "1"
+          NPM_DIST_TAG: latest
           SKIP_DOCKER_PUBLISH: "1"
-
-      - name: Wait for npm registry propagation
-        if: inputs.skip_registry_verify != true
-        run: sleep 45
-
-      - name: Post-publish registry checks
-        if: inputs.skip_registry_verify != true
-        working-directory: packages/opencode
-        run: bun run script/check-version-consistency.ts --phase post --version "${{ needs.build.outputs.version }}"
