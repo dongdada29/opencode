@@ -53,6 +53,10 @@ jobs:
             fi
           done
 
+      # 与 .husky/pre-push 一致：发版前从 models.dev 拉取最新 models.json 再打进二进制
+      - name: Update bundled models.json
+        run: bun run scripts/update-models.ts
+
       - name: Read version
         id: version
         run: |
