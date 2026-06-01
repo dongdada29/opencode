@@ -8,9 +8,19 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Release version (e.g. 1.1.95)"
+        description: "Release version (e.g. 1.2.2)"
         required: false
         type: string
+      publish_npm:
+        description: "Publish nuwaxcode packages to npm after build"
+        required: false
+        type: boolean
+        default: true
+      skip_registry_verify:
+        description: "Skip post-publish npm registry verification"
+        required: false
+        type: boolean
+        default: false
 
 concurrency: build-release-${{ github.ref }}
 
@@ -20,6 +30,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -51,6 +63,19 @@ jobs:
             echo "version=${TAG#v}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Sync package.json version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          bun -e "
+            const fs = require('fs');
+            const path = 'packages/opencode/package.json';
+            const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+            pkg.version = process.env.VERSION;
+            fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
+          "
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+
       - name: Build all targets
         working-directory: packages/opencode
         run: bun run script/build.ts
@@ -72,9 +97,7 @@ jobs:
       - name: Create archives
         run: |
           cd packages/opencode
-          # 统一从前一步解析出的版本号命名产物，避免不同版本构建时文件名冲突。
           VERSION="${{ steps.version.outputs.version }}"
-          # 归档名称示例：nuwaxcode-darwin-arm64-v1.1.95.tar.gz
           for dir in dist/*/; do
             name=$(basename "$dir")
             echo "--- Archiving $name ---"
@@ -87,15 +110,21 @@ jobs:
       - name: List archives
         run: ls -lh ${{ github.workspace }}/*.tar.gz ${{ github.workspace }}/*.zip
 
-      - name: Upload artifacts
+      - name: Upload release archives
         uses: actions/upload-artifact@v4
         with:
-          # 在 Actions 页面直接看到版本号，便于区分同一分支多次构建结果。
           name: all-platforms-v${{ steps.version.outputs.version }}
           retention-days: 1
           path: |
             ${{ github.workspace }}/*.tar.gz
             ${{ github.workspace }}/*.zip
+
+      - name: Upload dist for npm publish
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-dist-v${{ steps.version.outputs.version }}
+          retention-days: 1
+          path: packages/opencode/dist/
 
   release:
     needs: build
@@ -106,26 +135,17 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
+          name: all-platforms-v${{ needs.build.outputs.version }}
           path: artifacts
 
       - name: List artifacts
         run: find artifacts -type f | sort
 
-      - name: Determine version
-        id: version
-        run: |
-          if [ -n "${{ inputs.version }}" ]; then
-            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            TAG="${GITHUB_REF#refs/tags/}"
-            echo "version=${TAG#v}" >> $GITHUB_OUTPUT
-          fi
-
       - name: Create/update GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
+          VERSION="${{ needs.build.outputs.version }}"
           TAG="v${VERSION}"
 
           if gh release view "$TAG" 2>/dev/null; then
@@ -142,3 +162,71 @@ jobs:
 
           echo "=== Release $TAG assets ==="
           gh release view "$TAG" --json assets --jq '.assets[] | "\(.name) \(.size)"'
+
+  publish-npm:
+    needs: build
+    if: >-
+      always() &&
+      needs.build.result == 'success' &&
+      github.repository == 'nuwax-ai/nuwaxcode' &&
+      (
+        (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) ||
+        inputs.publish_npm == true
+      )
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: https://registry.npmjs.org
+
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: opencode-dist-v${{ needs.build.outputs.version }}
+          path: packages/opencode/dist
+
+      - name: Sync package.json version
+        run: |
+          VERSION="${{ needs.build.outputs.version }}"
+          bun -e "
+            const fs = require('fs');
+            const path = 'packages/opencode/package.json';
+            const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+            pkg.version = process.env.VERSION;
+            fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
+          "
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+
+      - name: Remove stale aggregator dist
+        working-directory: packages/opencode
+        run: rm -rf ./dist/nuwaxcode
+
+      - name: Pre-publish version checks
+        working-directory: packages/opencode
+        run: bun run script/check-version-consistency.ts --phase pre --version "${{ needs.build.outputs.version }}"
+
+      - name: Publish to npm
+        working-directory: packages/opencode
+        run: bun run script/publish.ts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: "false"
+          OPENCODE_VERSION: ${{ needs.build.outputs.version }}
+          OPENCODE_CHANNEL: latest
+          OPENCODE_RELEASE: "1"
+          SKIP_DOCKER_PUBLISH: "1"
+
+      - name: Wait for npm registry propagation
+        if: inputs.skip_registry_verify != true
+        run: sleep 45
+
+      - name: Post-publish registry checks
+        if: inputs.skip_registry_verify != true
+        working-directory: packages/opencode
+        run: bun run script/check-version-consistency.ts --phase post --version "${{ needs.build.outputs.version }}"

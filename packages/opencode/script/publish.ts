@@ -83,10 +83,18 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
   ),
 )
 
-const tasks = Object.entries(binaries).map(async ([name]) => {
-  await publish(`./dist/${name}`, name, binaries[name])
-})
-await Promise.all(tasks)
+// CI 上并行 npm publish 容易触发 registry 限流/竞态，默认顺序发布。
+const publishEntries = Object.entries(binaries)
+const publishPlatformPackages = async () => {
+  if (process.env.PUBLISH_NPM_PARALLEL === "1") {
+    await Promise.all(publishEntries.map(async ([name]) => publish(`./dist/${name}`, name, binaries[name])))
+    return
+  }
+  for (const [name] of publishEntries) {
+    await publish(`./dist/${name}`, name, binaries[name])
+  }
+}
+await publishPlatformPackages()
 await publish(`./dist/${pkg.name}`, `${pkg.name}`, version)
 
 const image = "ghcr.io/anomalyco/opencode"

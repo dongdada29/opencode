@@ -8,6 +8,10 @@
 
 - **CLI / 无 AVX2**: 修复 `nuwaxcode` 在无 AVX2 CPU 上静默退出（SIGILL 被当作 exit 0）；入口直接解析 `node_modules` 中的 `nuwaxcode-*`（含 baseline，`opencode-*` 兜底），不再使用 `bin/.opencode`；postinstall 仅校验平台包已安装。
 
+### 🔄 CI
+
+- **build-release**: 打 tag 后除 GitHub Release 外，自动执行 npm 发布（`publish-npm` job，需配置 `NPM_TOKEN`）。
+
 ---
 
 ## v1.2.1 (2026-05-17)
