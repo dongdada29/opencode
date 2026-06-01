@@ -172,6 +172,9 @@ jobs:
           name: opencode-dist-v${{ needs.build.outputs.version }}
           path: packages/opencode/dist
 
+      - name: Install dependencies (publish.ts needs workspace packages)
+        run: bun install --frozen-lockfile
+
       - name: Publish to npm (release-publish.sh)
         run: ./scripts/release-publish.sh "${{ needs.build.outputs.version }}"
         env:

@@ -47,7 +47,31 @@ if [ -d "./dist/nuwaxcode" ]; then
 fi
 
 echo "🧪 Pre-release version consistency checks..."
-bun run script/check-version-consistency.ts --phase pre --version "$VERSION"
+if [ "${SKIP_LOCAL_SMOKE:-}" = "1" ]; then
+  # CI：不跑 bun 版 pre（runner 上 bun 解析 monorepo 可能触发 @babel/debug 异常）；仅校验 dist package.json 版本
+  pre_ok=1
+  shopt -s nullglob
+  for pkg_json in dist/*/package.json; do
+    name=$(node -p "require('./${pkg_json}').name")
+    ver=$(node -p "require('./${pkg_json}').version")
+    case "$name" in nuwaxcode-*)
+      if [ "$ver" != "$VERSION" ]; then
+        echo "dist 二进制包版本不一致：${name}=${ver}，期望 ${VERSION}"
+        pre_ok=0
+      fi
+      ;;
+    esac
+  done
+  shopt -u nullglob
+  if [ "$pre_ok" != "1" ]; then exit 1; fi
+  if [ ! -d dist ] || [ -z "$(ls -A dist 2>/dev/null)" ]; then
+    echo "Error: dist 目录为空，请先下载 build artifact"
+    exit 1
+  fi
+  echo "pre 校验通过（CI shell）：dist 平台包版本均为 ${VERSION}"
+else
+  bun run script/check-version-consistency.ts --phase pre --version "$VERSION"
+fi
 
 echo "🚀 Publishing to npm (dist-tag: ${NPM_DIST_TAG})..."
 export SKIP_DOCKER_PUBLISH="${SKIP_DOCKER_PUBLISH:-1}"
