@@ -348,9 +348,9 @@
     },
     "packages/opencode": {
       "name": "nuwaxcode",
-      "version": "1.1.99",
+      "version": "1.2.2",
       "bin": {
-        "nuwaxcode": "./bin/nuwaxcode",
+        "nuwaxcode": "./bin/opencode",
       },
       "dependencies": {
         "@actions/core": "1.11.1",
