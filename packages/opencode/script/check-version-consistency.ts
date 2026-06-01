@@ -75,17 +75,40 @@ async function ensureDistBinariesConsistent(version: string) {
   }
 }
 
+function smokeBinaryCandidates(): string[] {
+  const os =
+    process.platform === "darwin" ? "darwin" : process.platform === "win32" ? "windows" : process.platform
+  const arch = process.arch === "x64" ? "x64" : process.arch === "arm64" ? "arm64" : process.arch
+  const core = `nuwaxcode-${os}-${arch}`
+  const names = [core]
+  if (os === "linux" && arch === "x64") {
+    names.push(`${core}-baseline`)
+  }
+  if (os === "darwin" && arch === "x64") {
+    names.push(`${core}-baseline`)
+  }
+  return names.map((name) => `./dist/${name}/bin/opencode`)
+}
+
 async function ensureLocalSmokeVersion(version: string) {
-  // 选择当前机器最常见的本地产物做烟测（mac arm64），不存在则跳过，不阻断非本机平台构建场景。
-  const smokeBin = "./dist/nuwaxcode-darwin-arm64/bin/opencode"
-  if (!(await Bun.file(smokeBin).exists())) {
-    console.warn(`未找到本地 smoke 二进制 ${smokeBin}，跳过本地版本烟测。`)
+  // 烟测使用与当前 runner 平台匹配的 dist 产物；CI（linux x64）不再误跑 darwin 二进制。
+  let smokeBin: string | undefined
+  for (const candidate of smokeBinaryCandidates()) {
+    if (await Bun.file(candidate).exists()) {
+      smokeBin = candidate
+      break
+    }
+  }
+  if (!smokeBin) {
+    console.warn(`未找到当前平台可执行的 smoke 二进制，跳过本地版本烟测。`)
     return
   }
 
+  await $`chmod +x ${smokeBin}`.quiet().nothrow()
+
   const out = await $`${smokeBin} --version`.quiet().nothrow()
   if (out.exitCode !== 0) {
-    console.error(`本地 smoke 二进制执行失败（exit=${out.exitCode}）。`)
+    console.error(`本地 smoke 二进制执行失败（${smokeBin}，exit=${out.exitCode}）。`)
     process.exit(1)
   }
   const actual = out.stdout.toString().trim()
@@ -93,6 +116,7 @@ async function ensureLocalSmokeVersion(version: string) {
     console.error(`本地二进制版本不一致：smoke=${actual}，期望 ${version}。`)
     process.exit(1)
   }
+  console.log(`smoke 版本校验通过：${smokeBin} => ${actual}`)
 }
 
 async function ensureRegistryMainVersion(version: string) {
