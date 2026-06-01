@@ -9,8 +9,13 @@ import { createRequire } from "module"
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
 
+// 发布后 postinstall 在包根目录；开发时与本文件同目录
+const aliasesPath = fs.existsSync(path.join(__dirname, "pkg-aliases.cjs"))
+  ? path.join(__dirname, "pkg-aliases.cjs")
+  : path.join(__dirname, "script", "pkg-aliases.cjs")
+const { packageAliases, needsX64Baseline } = require(aliasesPath)
+
 function detectPlatformAndArch() {
-  // Map platform names
   let platform
   switch (os.platform()) {
     case "darwin":
@@ -27,7 +32,6 @@ function detectPlatformAndArch() {
       break
   }
 
-  // Map architecture names
   let arch
   switch (os.arch()) {
     case "x64":
@@ -50,17 +54,16 @@ function detectPlatformAndArch() {
 function findBinary() {
   const { platform, arch } = detectPlatformAndArch()
   const binaryName = platform === "windows" ? "opencode.exe" : "opencode"
-  // 包名历史上经历过从 opencode-* 到 nuwaxcode-* 的迁移。
-  // 为了同时兼容：
-  // 1) 新版本主包（optionalDependencies 指向 nuwaxcode-*）
-  // 2) 旧版本或缓存环境（仍可能只安装了 opencode-*）
-  // 这里按“新优先、旧兜底”的顺序尝试解析平台包。
-  const packageCandidates = [`nuwaxcode-${platform}-${arch}`, `opencode-${platform}-${arch}`]
+  const core = `${platform}-${arch}`
+  const packageCandidates = []
+  if (needsX64Baseline(platform, arch, fs)) {
+    packageCandidates.push(...packageAliases(`nuwaxcode-${core}-baseline`))
+  }
+  packageCandidates.push(...packageAliases(`nuwaxcode-${core}`))
 
   let lastError = null
   for (const packageName of packageCandidates) {
     try {
-      // Use require.resolve to find the package
       const packageJsonPath = require.resolve(`${packageName}/package.json`)
       const packageDir = path.dirname(packageJsonPath)
       const binaryPath = path.join(packageDir, "bin", binaryName)
@@ -69,7 +72,7 @@ function findBinary() {
         throw new Error(`Binary not found at ${binaryPath}`)
       }
 
-      return { binaryPath, binaryName }
+      return binaryPath
     } catch (error) {
       lastError = error
     }
@@ -84,25 +87,14 @@ function findBinary() {
 async function main() {
   try {
     if (os.platform() === "win32") {
-      // On Windows, the .exe is already included in the package and bin field points to it
-      // No postinstall setup needed
       console.log("Windows detected: binary setup not needed (using packaged .exe)")
       return
     }
 
-    // On non-Windows platforms, just verify the binary package exists
-    // Don't replace the wrapper script - it handles binary execution
-    const { binaryPath } = findBinary()
-    const target = path.join(__dirname, "bin", ".opencode")
-    if (fs.existsSync(target)) fs.unlinkSync(target)
-    try {
-      fs.linkSync(binaryPath, target)
-    } catch {
-      fs.copyFileSync(binaryPath, target)
-    }
-    fs.chmodSync(target, 0o755)
+    // 仅校验 optional 平台包已安装；CLI 入口直接解析 node_modules，不再使用 bin/.opencode
+    findBinary()
   } catch (error) {
-    console.error("Failed to setup opencode binary:", error.message)
+    console.error("Failed to verify nuwaxcode platform binary:", error.message)
     process.exit(1)
   }
 }

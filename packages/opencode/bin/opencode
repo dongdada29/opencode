@@ -4,6 +4,7 @@ const childProcess = require("child_process")
 const fs = require("fs")
 const path = require("path")
 const os = require("os")
+const { packageAliases } = require("../script/pkg-aliases.cjs")
 
 function run(target) {
   const result = childProcess.spawnSync(target, process.argv.slice(2), {
@@ -13,7 +14,16 @@ function run(target) {
     console.error(result.error.message)
     process.exit(1)
   }
-  const code = typeof result.status === "number" ? result.status : 0
+  if (result.signal) {
+    console.error(
+      `nuwaxcode exited with signal ${result.signal}` +
+        (result.signal === "SIGILL"
+          ? " (CPU may not support AVX2; reinstall nuwaxcode or ensure nuwaxcode-*-baseline is installed)"
+          : ""),
+    )
+    process.exit(1)
+  }
+  const code = typeof result.status === "number" ? result.status : 1
   process.exit(code)
 }
 
@@ -24,12 +34,6 @@ if (envPath) {
 
 const scriptPath = fs.realpathSync(__filename)
 const scriptDir = path.dirname(scriptPath)
-
-//
-const cached = path.join(scriptDir, ".opencode")
-if (fs.existsSync(cached)) {
-  run(cached)
-}
 
 const platformMap = {
   darwin: "darwin",
@@ -50,7 +54,7 @@ let arch = archMap[os.arch()]
 if (!arch) {
   arch = os.arch()
 }
-const base = "opencode-" + platform + "-" + arch
+const base = "nuwaxcode-" + platform + "-" + arch
 const binary = platform === "windows" ? "opencode.exe" : "opencode"
 
 function supportsAvx2() {
@@ -154,8 +158,10 @@ function findBinary(startDir) {
     const modules = path.join(current, "node_modules")
     if (fs.existsSync(modules)) {
       for (const name of names) {
-        const candidate = path.join(modules, name, "bin", binary)
-        if (fs.existsSync(candidate)) return candidate
+        for (const pkg of packageAliases(name)) {
+          const candidate = path.join(modules, pkg, "bin", binary)
+          if (fs.existsSync(candidate)) return candidate
+        }
       }
     }
     const parent = path.dirname(current)
@@ -169,8 +175,8 @@ function findBinary(startDir) {
 const resolved = findBinary(scriptDir)
 if (!resolved) {
   console.error(
-    "It seems that your package manager failed to install the right version of the opencode CLI for your platform. You can try manually installing " +
-      names.map((n) => `\"${n}\"`).join(" or ") +
+    "It seems that your package manager failed to install the right version of the nuwaxcode CLI for your platform. You can try manually installing " +
+      names.flatMap((n) => packageAliases(n)).map((n) => `\"${n}\"`).join(" or ") +
       " package",
   )
   process.exit(1)

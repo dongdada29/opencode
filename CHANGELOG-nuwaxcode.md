@@ -2,6 +2,14 @@
 
 本文档总结了 `feat/nuwaxcode` 分支相对于主分支的主要更改。
 
+## v1.2.2 (2026-06-01)
+
+### 🐛 修复
+
+- **CLI / 无 AVX2**: 修复 `nuwaxcode` 在无 AVX2 CPU 上静默退出（SIGILL 被当作 exit 0）；入口直接解析 `node_modules` 中的 `nuwaxcode-*`（含 baseline，`opencode-*` 兜底），不再使用 `bin/.opencode`；postinstall 仅校验平台包已安装。
+
+---
+
 ## v1.2.1 (2026-05-17)
 
 > 仅 GitHub Release（`git tag v1.2.1` → `build-release.yml`），**不发 npm**。
