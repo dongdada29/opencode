@@ -6,11 +6,11 @@ import { Config } from "@/config"
 
 import type { Info as SandboxInfo } from "@/config/sandbox"
 
-import { InstanceState } from "@/effect"
+import { InstanceState } from "@/effect/instance-state"
 
 import { Log } from "@/util"
 
-import { Session } from "@/session"
+import { Session } from "@/session/session"
 
 import type { SessionID } from "@/session/schema"
 

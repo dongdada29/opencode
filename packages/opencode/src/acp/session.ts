@@ -1,129 +1,231 @@
-import { RequestError, type McpServer } from "@agentclientprotocol/sdk"
-import type { ACPSessionState } from "./types"
-import { Log } from "@/util"
-import type { OpencodeClient } from "@opencode-ai/sdk/v2"
+import type { McpServer } from "@agentclientprotocol/sdk"
+import type { Message, Part } from "@opencode-ai/sdk/v2"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { Context, Effect, Layer, Ref } from "effect"
+import * as ACPError from "./error"
 
-const log = Log.create({ service: "acp-session-manager" })
+export type SelectedModel = {
+  providerID: ProviderV2.ID
+  modelID: ModelV2.ID
+}
 
-export class ACPSessionManager {
-  private sessions = new Map<string, ACPSessionState>()
-  private sdk: OpencodeClient
+export type KnownMessagePartMetadata = {
+  messageId: string
+  partId: string
+  partType?: Part["type"]
+  role?: Message["role"]
+  ignored?: boolean
+  toolCallId?: string
+  metadata?: unknown
+}
 
-  constructor(sdk: OpencodeClient) {
-    this.sdk = sdk
-  }
+export type Info = {
+  id: string
+  cwd: string
+  mcpServers: readonly McpServer[]
+  createdAt: Date
+  model?: SelectedModel
+  variant?: string
+  modeId?: string
+  knownParts: ReadonlyMap<string, KnownMessagePartMetadata>
+}
 
-  tryGet(sessionId: string): ACPSessionState | undefined {
-    return this.sessions.get(sessionId)
-  }
+export type StoreInput = {
+  id: string
+  cwd: string
+  mcpServers?: readonly McpServer[]
+  createdAt?: Date
+  model?: SelectedModel
+  variant?: string
+  modeId?: string
+}
 
-  /**
-   * 创建 ACP 侧会话镜像，并可选保存客户端在 `session/new` 里通过 `_meta.systemPrompt` 传入的自定义系统提示。
-   * 该字段不会写入 OpenCode session 实体，仅在 ACP 桥接层保留，供后续 `sdk.session.prompt` 注入 `system`。
-   */
-  async create(
-    cwd: string,
-    mcpServers: McpServer[],
-    model?: ACPSessionState["model"],
-    systemPrompt?: ACPSessionState["systemPrompt"],
-  ): Promise<ACPSessionState> {
-    const session = await this.sdk.session
-      .create(
-        {
-          directory: cwd,
-        },
-        { throwOnError: true },
-      )
-      .then((x) => x.data!)
+export type RecordPartMetadataInput = {
+  sessionId: string
+  messageId: string
+  partId: string
+  partType?: Part["type"]
+  role?: Message["role"]
+  ignored?: boolean
+  toolCallId?: string
+  metadata?: unknown
+}
 
-    const sessionId = session.id
-    const resolvedModel = model
+export type PartMetadataLookupInput = {
+  sessionId: string
+  messageId: string
+  partId: string
+}
 
-    const state: ACPSessionState = {
-      id: sessionId,
-      cwd,
-      mcpServers,
-      createdAt: new Date(),
-      model: resolvedModel,
-      systemPrompt,
-    }
-    log.info("creating_session", {
-      sessionId,
-      hasSystemPrompt: systemPrompt !== undefined,
+export type Interface = {
+  readonly create: (input: StoreInput) => Effect.Effect<Info>
+  readonly load: (input: StoreInput) => Effect.Effect<Info>
+  readonly list: (cwd?: string) => Effect.Effect<readonly Info[]>
+  readonly get: (sessionId: string) => Effect.Effect<Info, ACPError.SessionNotFoundError>
+  readonly tryGet: (sessionId: string) => Effect.Effect<Info | undefined>
+  readonly remove: (sessionId: string) => Effect.Effect<Info | undefined>
+  readonly setModel: (
+    sessionId: string,
+    model: SelectedModel | undefined,
+  ) => Effect.Effect<Info, ACPError.SessionNotFoundError>
+  readonly getModel: (sessionId: string) => Effect.Effect<SelectedModel | undefined, ACPError.SessionNotFoundError>
+  readonly setVariant: (
+    sessionId: string,
+    variant: string | undefined,
+  ) => Effect.Effect<Info, ACPError.SessionNotFoundError>
+  readonly getVariant: (sessionId: string) => Effect.Effect<string | undefined, ACPError.SessionNotFoundError>
+  readonly setMode: (
+    sessionId: string,
+    modeId: string | undefined,
+  ) => Effect.Effect<Info, ACPError.SessionNotFoundError>
+  readonly getMode: (sessionId: string) => Effect.Effect<string | undefined, ACPError.SessionNotFoundError>
+  readonly recordPartMetadata: (
+    input: RecordPartMetadataInput,
+  ) => Effect.Effect<KnownMessagePartMetadata, ACPError.SessionNotFoundError>
+  readonly getPartMetadata: (
+    input: PartMetadataLookupInput,
+  ) => Effect.Effect<KnownMessagePartMetadata | undefined, ACPError.SessionNotFoundError>
+  readonly tryGetPartMetadata: (input: PartMetadataLookupInput) => Effect.Effect<KnownMessagePartMetadata | undefined>
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/ACP/Session") {}
+
+type State = Map<string, Info>
+
+export const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const sessions = yield* Ref.make<State>(new Map())
+
+    const store = Effect.fn("ACP.Session.store")(function* (input: StoreInput) {
+      const session = makeSession(input)
+      yield* Ref.update(sessions, (state) => new Map(state).set(session.id, session))
+      return snapshot(session)
     })
 
-    this.sessions.set(sessionId, state)
-    return state
-  }
+    const tryGet = Effect.fn("ACP.Session.tryGet")(function* (sessionId: string) {
+      const session = (yield* Ref.get(sessions)).get(sessionId)
+      if (!session) return
+      return snapshot(session)
+    })
 
-  async load(
-    sessionId: string,
-    cwd: string,
-    mcpServers: McpServer[],
-    model?: ACPSessionState["model"],
-  ): Promise<ACPSessionState> {
-    const session = await this.sdk.session
-      .get(
-        {
-          sessionID: sessionId,
-          directory: cwd,
-        },
-        { throwOnError: true },
-      )
-      .then((x) => x.data!)
+    const get = Effect.fn("ACP.Session.get")(function* (sessionId: string) {
+      const session = yield* tryGet(sessionId)
+      if (session) return session
+      return yield* new ACPError.SessionNotFoundError({ sessionId })
+    })
 
-    const resolvedModel = model
+    const update = Effect.fn("ACP.Session.update")(function* (sessionId: string, fn: (session: Info) => Info) {
+      const result = yield* Ref.modify(sessions, (state) => {
+        const session = state.get(sessionId)
+        if (!session) return [undefined, state] as const
+        const next = fn(session)
+        return [snapshot(next), new Map(state).set(sessionId, next)] as const
+      })
+      if (result) return result
+      return yield* new ACPError.SessionNotFoundError({ sessionId })
+    })
 
-    const state: ACPSessionState = {
-      id: sessionId,
-      cwd,
-      mcpServers,
-      createdAt: new Date(session.time.created),
-      model: resolvedModel,
-    }
-    log.info("loading_session", { state })
+    const remove = Effect.fn("ACP.Session.remove")(function* (sessionId: string) {
+      return yield* Ref.modify(sessions, (state) => {
+        const session = state.get(sessionId)
+        if (!session) return [undefined, state] as const
+        const next = new Map(state)
+        next.delete(sessionId)
+        return [snapshot(session), next] as const
+      })
+    })
 
-    this.sessions.set(sessionId, state)
-    return state
-  }
+    const setModel: Interface["setModel"] = Effect.fn("ACP.Session.setModel")((sessionId, model) =>
+      update(sessionId, (session) => ({ ...session, model })),
+    )
 
-  get(sessionId: string): ACPSessionState {
-    const session = this.sessions.get(sessionId)
-    if (!session) {
-      log.error("session not found", { sessionId })
-      throw RequestError.invalidParams(JSON.stringify({ error: `Session not found: ${sessionId}` }))
-    }
-    return session
-  }
+    const setVariant: Interface["setVariant"] = Effect.fn("ACP.Session.setVariant")((sessionId, variant) =>
+      update(sessionId, (session) => ({ ...session, variant })),
+    )
 
-  getModel(sessionId: string) {
-    const session = this.get(sessionId)
-    return session.model
-  }
+    const setMode: Interface["setMode"] = Effect.fn("ACP.Session.setMode")((sessionId, modeId) =>
+      update(sessionId, (session) => ({ ...session, modeId })),
+    )
 
-  setModel(sessionId: string, model: ACPSessionState["model"]) {
-    const session = this.get(sessionId)
-    session.model = model
-    this.sessions.set(sessionId, session)
-    return session
-  }
+    const recordPartMetadata: Interface["recordPartMetadata"] = Effect.fn("ACP.Session.recordPartMetadata")((input) => {
+      const metadata = {
+        messageId: input.messageId,
+        partId: input.partId,
+        partType: input.partType,
+        role: input.role,
+        ignored: input.ignored,
+        toolCallId: input.toolCallId,
+        metadata: input.metadata,
+      }
+      return update(input.sessionId, (session) => ({
+        ...session,
+        knownParts: new Map(session.knownParts).set(partMetadataKey(input), metadata),
+      })).pipe(Effect.as(metadata))
+    })
 
-  getVariant(sessionId: string) {
-    const session = this.get(sessionId)
-    return session.variant
-  }
+    return Service.of({
+      create: store,
+      load: store,
+      list: Effect.fn("ACP.Session.list")(function* (cwd?: string) {
+        return [...(yield* Ref.get(sessions)).values()]
+          .filter((session) => !cwd || session.cwd === cwd)
+          .map(snapshot)
+          .toSorted((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      }),
+      get,
+      tryGet,
+      remove,
+      setModel,
+      getModel: Effect.fn("ACP.Session.getModel")(function* (sessionId) {
+        return (yield* get(sessionId)).model
+      }),
+      setVariant,
+      getVariant: Effect.fn("ACP.Session.getVariant")(function* (sessionId) {
+        return (yield* get(sessionId)).variant
+      }),
+      setMode,
+      getMode: Effect.fn("ACP.Session.getMode")(function* (sessionId) {
+        return (yield* get(sessionId)).modeId
+      }),
+      recordPartMetadata,
+      getPartMetadata: Effect.fn("ACP.Session.getPartMetadata")(function* (input) {
+        return (yield* get(input.sessionId)).knownParts.get(partMetadataKey(input))
+      }),
+      tryGetPartMetadata: Effect.fn("ACP.Session.tryGetPartMetadata")(function* (input) {
+        return (yield* tryGet(input.sessionId))?.knownParts.get(partMetadataKey(input))
+      }),
+    })
+  }),
+)
 
-  setVariant(sessionId: string, variant?: string) {
-    const session = this.get(sessionId)
-    session.variant = variant
-    this.sessions.set(sessionId, session)
-    return session
-  }
+export const defaultLayer = layer
 
-  setMode(sessionId: string, modeId: string) {
-    const session = this.get(sessionId)
-    session.modeId = modeId
-    this.sessions.set(sessionId, session)
-    return session
+function makeSession(input: StoreInput): Info {
+  return {
+    id: input.id,
+    cwd: input.cwd,
+    mcpServers: [...(input.mcpServers ?? [])],
+    createdAt: input.createdAt ? new Date(input.createdAt) : new Date(),
+    model: input.model,
+    variant: input.variant,
+    modeId: input.modeId,
+    knownParts: new Map(),
   }
 }
+
+function snapshot(session: Info): Info {
+  return {
+    ...session,
+    mcpServers: [...session.mcpServers],
+    createdAt: new Date(session.createdAt),
+    knownParts: new Map(session.knownParts),
+  }
+}
+
+function partMetadataKey(input: { messageId: string; partId: string }) {
+  return `${input.messageId}:${input.partId}`
+}
+
+export * as ACPSession from "./session"

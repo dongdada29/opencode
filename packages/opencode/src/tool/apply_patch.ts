@@ -7,7 +7,6 @@ import { InstanceState } from "@/effect/instance-state"
 import { Patch } from "../patch"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { assertExternalDirectoryEffect } from "./external-directory"
-import { assertSandboxWritableEffect } from "@/sandbox"
 import { trimDiff } from "./edit"
 import { LSP } from "@/lsp/lsp"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -73,7 +72,6 @@ export const ApplyPatchTool = Tool.define(
       for (const hunk of hunks) {
         const filePath = path.resolve(instance.directory, hunk.path)
         yield* assertExternalDirectoryEffect(ctx, filePath)
-        yield* assertSandboxWritableEffect(filePath)
 
         switch (hunk.type) {
           case "add": {
@@ -143,7 +141,6 @@ export const ApplyPatchTool = Tool.define(
 
             const movePath = hunk.move_path ? path.resolve(instance.directory, hunk.move_path) : undefined
             yield* assertExternalDirectoryEffect(ctx, movePath)
-            if (movePath) yield* assertSandboxWritableEffect(movePath)
 
             fileChanges.push({
               filePath,
