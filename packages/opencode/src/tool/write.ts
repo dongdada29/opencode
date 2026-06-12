@@ -2,15 +2,15 @@ import { Schema } from "effect"
 import * as path from "path"
 import { Effect } from "effect"
 import * as Tool from "./tool"
-import { LSP } from "../lsp"
+import { LSP } from "@/lsp/lsp"
 import { createTwoFilesPatch } from "diff"
 import DESCRIPTION from "./write.txt"
-import { Bus } from "../bus"
-import { File } from "../file"
-import { FileWatcher } from "../file/watcher"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { FileSystem } from "@opencode-ai/core/filesystem"
+import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { Format } from "../format"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { Instance } from "../project/instance"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { InstanceState } from "@/effect/instance-state"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { assertSandboxWritableEffect } from "@/sandbox"
@@ -29,8 +29,8 @@ export const WriteTool = Tool.define(
   "write",
   Effect.gen(function* () {
     const lsp = yield* LSP.Service
-    const fs = yield* AppFileSystem.Service
-    const bus = yield* Bus.Service
+    const fs = yield* FSUtil.Service
+    const events = yield* EventV2Bridge.Service
     const format = yield* Format.Service
 
     return {
@@ -38,9 +38,10 @@ export const WriteTool = Tool.define(
       parameters: Parameters,
       execute: (params: { content: string; filePath: string }, ctx: Tool.Context) =>
         Effect.gen(function* () {
+          const instance = yield* InstanceState.context
           const filepath = path.isAbsolute(params.filePath)
             ? params.filePath
-            : path.join(Instance.directory, params.filePath)
+            : path.join(instance.directory, params.filePath)
           yield* assertExternalDirectoryEffect(ctx, filepath)
           yield* assertSandboxWritableEffect(filepath)
 
@@ -54,7 +55,7 @@ export const WriteTool = Tool.define(
           const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, contentNew))
           yield* ctx.ask({
             permission: "edit",
-            patterns: [path.relative(Instance.worktree, filepath)],
+            patterns: [path.relative(instance.worktree, filepath)],
             always: ["*"],
             metadata: {
               filepath,
@@ -66,8 +67,8 @@ export const WriteTool = Tool.define(
           if (yield* format.file(filepath)) {
             yield* Bom.syncFile(fs, filepath, desiredBom)
           }
-          yield* bus.publish(File.Event.Edited, { file: filepath })
-          yield* bus.publish(FileWatcher.Event.Updated, {
+          yield* events.publish(FileSystem.Event.Edited, { file: filepath })
+          yield* events.publish(Watcher.Event.Updated, {
             file: filepath,
             event: exists ? "change" : "add",
           })
@@ -75,7 +76,7 @@ export const WriteTool = Tool.define(
           let output = "Wrote file successfully."
           yield* lsp.touchFile(filepath, "document")
           const diagnostics = yield* lsp.diagnostics()
-          const normalizedFilepath = AppFileSystem.normalizePath(filepath)
+          const normalizedFilepath = FSUtil.normalizePath(filepath)
           let projectDiagnosticsCount = 0
           for (const [file, issues] of Object.entries(diagnostics)) {
             const current = file === normalizedFilepath
@@ -91,7 +92,7 @@ export const WriteTool = Tool.define(
           }
 
           return {
-            title: path.relative(Instance.worktree, filepath),
+            title: path.relative(instance.worktree, filepath),
             metadata: {
               diagnostics,
               filepath,

@@ -3,6 +3,7 @@ node_modules
 .worktrees
 .sst
 .env
+.env.local
 .idea
 .vscode
 *~
@@ -13,6 +14,8 @@ ts-dist
 .turbo
 **/.serena
 .serena/
+**/.omo
+.omo/
 /result
 refs
 Session.vim
