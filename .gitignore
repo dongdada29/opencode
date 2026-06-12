@@ -33,3 +33,5 @@ logs/
 # Agent
 .agent
 packages/opencode/assets/models.last_updated
+packages/opencode/src/provider/models-snapshot.js
+packages/opencode/src/provider/models-snapshot.d.ts
