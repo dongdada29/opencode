@@ -1,11 +1,12 @@
 name: build-release
-run-name: build-release ${{ github.ref_name }}
+run-name: "🚀 nuwaxcode ${{ github.ref_name }}"
 
-# 仅通过 push tag（如 v1.2.2）触发；发版前请在仓库内 bump 版本并更新 CHANGELOG。
+# 仅通过 push semver tag 触发（如 v1.3.0、v1.3.0-beta.1）；
+# 不受理 vscode-v* 等非版本号 tag。
 on:
   push:
     tags:
-      - "v*"
+      - "v[0-9]*"
 
 concurrency: build-release-${{ github.ref }}
 
