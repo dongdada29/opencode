@@ -120,65 +120,27 @@
 | `OPENCODE_MODELS_PATH` | `src/provider/models.ts` | 自定义模型列表本地路径 |
 | `OPENCODE_CONFIG_CONTENT` | `src/config/config.ts` | JSON 格式的内联配置（mcp/permission 等）。nuwaxcode 路径下**不含 provider 块**——provider/model 由 nuwaxcode 从 `OPENCODE_MODEL` 注册（见下） |
 
-### 模型下发完整流程（OPENCODE_MODEL + provider 注册 + loaders + 信任选择）
+### 模型下发流程（4 处自定义，易丢失，合并时必查）
 
-nuwaclaw 客户端通过 `OPENCODE_MODEL` 下发引擎模型（如 `openai-compatible/glm-5`）。这条链路由
-**4 处自定义改动**组成，缺一不可——任一丢失都会表现为选模型回退 `opencode/big-pickle` 或执行报
-`Internal error: OpenCode service failure`。upstream v1.17.4 sync（`ca631d34c`）曾一次性冲掉全部 4 处。
+**作用**：nuwaclaw 通过 `OPENCODE_MODEL` 下发引擎模型（如 `openai-compatible/glm-5`）。完整链路（选模型 + 执行）由 4 处自定义改动组成，缺一不可——丢失任一会回退 `opencode/big-pickle` 或执行报 `Internal error: OpenCode service failure`。upstream v1.17.4 sync 曾一次性冲掉全部 4 处。
 
-> 重要前提修正：nuwaclaw 在 nuwaxcode 路径下发的 `config.model` 是**原始模型名（无 `provider/` 前缀）**，
-> 且 `OPENCODE_CONFIG_CONTENT` **不含 provider 块**（nuwaclaw `buildOpencodeProviderSection` 因 model 无 `/`
-> 返回 undefined）。因此 **provider/model 注册必须在 nuwaxcode 侧完成**，不能依赖客户端。
+> 前提：nuwaclaw nuwaxcode 路径下发的是原始 model（无 `provider/` 前缀）+ `OPENCODE_CONFIG_CONTENT` 不含 provider 块，故 provider/model 注册必须在 nuwaxcode 侧完成。
 
-**完整数据流**：
-```
-客户端 env:  OPENCODE_MODEL=openai-compatible/glm-5  (带前缀)
-             OPENAI_BASE_URL / OPENAI_API_KEY
-             OPENCODE_CONFIG_CONTENT  (仅 mcp/permission，无 provider 块)
-             config.model = 原始 glm-5 (无前缀)
+**改动位置**：
 
-config.ts loadInstanceState() 末尾:
-  ① result.model = OPENCODE_MODEL                              [Batch 5]
-  ② result.provider[pid].models[mid] 注册                       [Batch 6.2]
+| 文件 | 改动 | 丢失症状 |
+|------|------|----------|
+| `src/config/config.ts` | `loadInstanceState` 末尾：`OPENCODE_MODEL` 覆盖 `result.model` + 注册 `result.provider[pid].models[mid]` | 选模型回退 big-pickle / 执行 service failure |
+| `src/provider/provider.ts` | `custom()` 含 `openai-compatible` / `anthropic-compatible` loader（从 env autoload + getModel） | provider 不实例化 |
+| `src/acp/service.ts` | `defaultModelFromConfig` 信任 configured 优先返回（v1.2.0 行为） | 选模型回退 big-pickle |
 
-provider 构建:
-  ③ configProviders → database['openai-compatible']            (来自 ② 的 cfg.provider)
-  ④ custom() 'openai-compatible' loader → autoload(baseURL+key) [Batch 1.5c]
+**合并检查清单**：
+- [ ] `config.ts` 末尾同时设 `result.model` + 注册 `provider[pid].models[mid]`
+- [ ] `provider.ts` `custom()` 含两个 compatible loader
+- [ ] `service.ts` `defaultModelFromConfig` 信任 configured 优先
+- [ ] 全用 Effect API；环境变量不存在时行为不变
 
-ACP service.ts:
-  ⑤ defaultModelFromConfig: if (configured) return configured   [Batch 6.1]
-     → newSession currentValue = openai-compatible/glm-5
-
-执行 session/prompt:
-  ⑥ getModel('glm-5') → provider.models['glm-5'] (来自 ②) + modelLoader 实例化
-     → stopReason=end_turn
-```
-
-**4 处改动明细**：
-
-| # | Batch | 文件 | 改动 | 丢失症状 |
-|---|-------|------|------|----------|
-| ① | 5 | `src/config/config.ts` | `result.model = process.env.OPENCODE_MODEL`（覆盖，最高优先级） | 选模型回退 big-pickle |
-| ② | 6.2 | `src/config/config.ts` | 同处注册 `provider[pid].models[mid]`（执行注册） | 执行报 service failure |
-| ③ | 1.5c | `src/provider/provider.ts` | `custom()` 里 `openai-compatible`/`anthropic-compatible` loader（从 env autoload + getModel） | provider 不实例化 |
-| ④ | 6.1 | `src/acp/service.ts` | `defaultModelFromConfig` 信任 configured 优先返回 | 选模型回退 big-pickle |
-
-①②位于同一处（`loadInstanceState` 末尾 `return` 之前，所有文件/managed/account 合并之后）；③在
-`provider.ts` 的 `custom()`；④在 `service.ts` 的 `defaultModelFromConfig`。
-
-**合并检查清单（4 处全查）**：
-- [ ] `config.ts` `loadInstanceState` 末尾：`OPENCODE_MODEL` 同时设 `result.model` **且** 注册 `result.provider[pid].models[mid]`（①②）
-- [ ] `provider.ts` `custom()` 含 `openai-compatible` + `anthropic-compatible` loader（③）
-- [ ] `service.ts` `defaultModelFromConfig` 第一行 `if (configured) return configured`（④）
-- [ ] 全部用 Effect API（`yield* Effect.logDebug`，非 legacy `log.debug`）
-- [ ] 环境变量不存在时行为不变（无回归）
-
-**回测**：上游 sync 后跑一遍 ACP 握手（**故意不带 provider 块**）——
-`session/new` 的 `model.currentValue` 应为 `openai-compatible/glm-5`（非 big-pickle），
-`session/prompt` 应返回 `stopReason=end_turn`（非 service failure）。详见
-`packages/opencode/docs/model-acp-replay-retention.md` Batch 6.3（含完整 env + 通过判据）。
-
-**关联文档**：`packages/opencode/docs/model-acp-replay-retention.md` Batch 5 + 1.5c + 6（含每处代码片段与 replay checklist）
+**回测 + 详细代码片段**：见 `packages/opencode/docs/model-acp-replay-retention.md`（Batch 5 + 1.5c + 6，含每处代码 + 6.3 回测：无 provider 块跑握手断言 `currentValue=glm-5` + `stopReason=end_turn`）
 
 ## 10. 依赖版本差异
 
