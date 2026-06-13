@@ -588,6 +588,24 @@ export const layer = Layer.effect(
         // 所有文件/managed/account 配置。
         if (process.env.OPENCODE_MODEL) {
           result.model = process.env.OPENCODE_MODEL
+          // 把下发的 provider/model 注册进 cfg.provider，等价于客户端注入 provider 块。
+          // 否则当客户端只下发原始 model（无 provider 块）时，openai-compatible 等 custom
+          // provider 不会被注册，执行时 getModel 找不到模型 → "OpenCode service failure"。
+          const slashIdx = result.model.indexOf("/")
+          if (slashIdx > 0) {
+            const pid = result.model.slice(0, slashIdx)
+            const mid = result.model.slice(slashIdx + 1)
+            if (mid) {
+              result.provider = result.provider ?? {}
+              const existing = result.provider[pid]
+              if (!existing) {
+                result.provider[pid] = { name: pid, models: { [mid]: { name: mid } } }
+              } else {
+                existing.models = existing.models ?? {}
+                if (!existing.models[mid]) existing.models[mid] = { name: mid }
+              }
+            }
+          }
           yield* Effect.logDebug("loaded model override from OPENCODE_MODEL env var", {
             model: result.model,
           })
