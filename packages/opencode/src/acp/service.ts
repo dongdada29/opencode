@@ -788,7 +788,9 @@ function defaultModelFromConfig(
   providers: Record<ProviderV2.ID, Provider.Info>,
 ): Directory.DefaultModel | undefined {
   const configured = configuredModel ? Provider.parseModel(configuredModel) : undefined
-  if (configured && providers[configured.providerID]?.models[configured.modelID]) return configured
+  // 直接信任 config 下发的模型（v1.2.0 行为）：provider 由 custom loader 从 env 按需实例化，
+  // 不要求模型项预注册——否则 openai-compatible/<custom-model> 等未预置模型会回退到 opencode/big-pickle。
+  if (configured) return configured
 
   // First-session ACP startup must not scan historical sessions just to infer
   // a default. Configured model, opencode provider, then sorted best model keep
