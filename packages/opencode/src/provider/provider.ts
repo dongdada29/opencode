@@ -176,6 +176,54 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    "anthropic-compatible": Effect.fnUntraced(function* (provider: Info) {
+      const env = yield* dep.env()
+      let baseURL = env["OPENCODE_ANTHROPIC_API_BASE"] ?? env["ANTHROPIC_BASE_URL"]
+      if (baseURL && !baseURL.endsWith("/v1") && !baseURL.endsWith("/v1/")) {
+        baseURL = baseURL.replace(/\/$/, "") + "/v1"
+      }
+      const apiKey = env["OPENCODE_ANTHROPIC_API_KEY"] ?? env["ANTHROPIC_API_KEY"]
+      const autoload = !!(baseURL || apiKey)
+
+      return {
+        autoload,
+        options: {
+          headers: {
+            "anthropic-beta": "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+          },
+          ...(baseURL ? { baseURL } : {}),
+          ...(apiKey ? { apiKey } : {}),
+          ...(env["OPENCODE_MAX_TOKENS"] ? { max_tokens: parseInt(env["OPENCODE_MAX_TOKENS"]!) } : {}),
+          ...(provider?.options?.max_tokens ? { max_tokens: provider.options.max_tokens } : {}),
+          ...(env["OPENCODE_MAX_CONTEXT_TOKENS"]
+            ? { max_context_tokens: parseInt(env["OPENCODE_MAX_CONTEXT_TOKENS"]!) }
+            : {}),
+          ...(provider?.options?.max_context_tokens
+            ? { max_context_tokens: provider.options.max_context_tokens }
+            : {}),
+        },
+        getModel: autoload
+          ? async (sdk: any, modelID: string, _options: unknown) => {
+              if (typeof sdk === "function" && typeof sdk.languageModel === "function") {
+                return sdk.languageModel(modelID)
+              }
+              if (typeof sdk === "function") {
+                return sdk(modelID)
+              }
+              const { createAnthropic } = await import("@ai-sdk/anthropic")
+              const p = createAnthropic({
+                baseURL: baseURL!,
+                apiKey: apiKey!,
+                headers: {
+                  "anthropic-beta":
+                    "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
+                },
+              })
+              return p.languageModel(modelID)
+            }
+          : undefined,
+      }
+    }),
     opencode: Effect.fnUntraced(function* (input: Info) {
       const env = yield* dep.env()
       const hasKey = iife(() => {
@@ -207,6 +255,50 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
         options: { headerTimeout: OPENAI_HEADER_TIMEOUT_DEFAULT },
       }),
+    "openai-compatible": Effect.fnUntraced(function* (provider: Info) {
+      const env = yield* dep.env()
+      const baseURL =
+        env["OPENCODE_OPENAI_API_BASE"] ?? env["OPENCODE_API_BASE"] ?? env["OPENAI_BASE_URL"]
+      const apiKey =
+        env["OPENCODE_OPENAI_API_KEY"] ?? env["OPENCODE_API_KEY"] ?? env["OPENAI_API_KEY"]
+      const autoload = !!(baseURL && apiKey)
+
+      return {
+        autoload,
+        options: {
+          ...(baseURL ? { baseURL } : {}),
+          ...(apiKey ? { apiKey } : {}),
+          ...(env["OPENCODE_MAX_TOKENS"] ? { max_tokens: parseInt(env["OPENCODE_MAX_TOKENS"]!) } : {}),
+          ...(provider?.options?.max_tokens ? { max_tokens: provider.options.max_tokens } : {}),
+          ...(env["OPENCODE_MAX_CONTEXT_TOKENS"]
+            ? { max_context_tokens: parseInt(env["OPENCODE_MAX_CONTEXT_TOKENS"]!) }
+            : {}),
+          ...(provider?.options?.max_context_tokens
+            ? { max_context_tokens: provider.options.max_context_tokens }
+            : {}),
+        },
+        getModel: autoload
+          ? async (sdk: any, modelID: string, _options: unknown) => {
+              if (typeof sdk === "function" && typeof sdk.chatModel === "function") {
+                return sdk.chatModel(modelID)
+              }
+              if (typeof sdk === "function") {
+                return sdk(modelID)
+              }
+              if (sdk && sdk.languageModel) {
+                return sdk.languageModel(modelID)
+              }
+              const { createOpenAICompatible } = await import("@ai-sdk/openai-compatible")
+              const p = createOpenAICompatible({
+                name: "openai-compatible",
+                baseURL: baseURL!,
+                apiKey: apiKey!,
+              })
+              return p.languageModel(modelID)
+            }
+          : undefined,
+      }
+    }),
     xai: () =>
       Effect.succeed({
         autoload: false,
