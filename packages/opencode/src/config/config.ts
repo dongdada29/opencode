@@ -582,6 +582,17 @@ export const layer = Layer.effect(
           result.compaction = { ...result.compaction, prune: false }
         }
 
+        // OPENCODE_MODEL env var overrides model (highest priority).
+        // nuwaxcode 客户端(nuwaclaw)通过 OPENCODE_MODEL 下发引擎模型；upstream v1.17.4 sync 时
+        // 此覆盖被误删，导致 cfg.model 为空、会话回退到默认模型(big-pickle)。放最后确保优先级高于
+        // 所有文件/managed/account 配置。
+        if (process.env.OPENCODE_MODEL) {
+          result.model = process.env.OPENCODE_MODEL
+          yield* Effect.logDebug("loaded model override from OPENCODE_MODEL env var", {
+            model: result.model,
+          })
+        }
+
         return {
           config: result,
           directories,

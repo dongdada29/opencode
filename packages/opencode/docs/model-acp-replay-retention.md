@@ -230,6 +230,34 @@ Replay checklist:
 
 ---
 
+## Batch 5 — Config: OPENCODE_MODEL env override (COMPLETED 2026-06-13)
+
+**Modified: `src/config/config.ts`**
+
+The `OPENCODE_MODEL` env-var → `cfg.model` override (highest priority) was removed by the upstream v1.17.4 sync (`ca631d34c fix: sync with upstream v1.17.4, fix build`). The nuwaclaw client dispatches the engine model via `OPENCODE_MODEL` (e.g. `openai-compatible/glm-5`); without the override, `cfg.model` is empty and ACP `newSession` → `selectDefaultModel(snapshot)` falls back to the priority-list default (`opencode/big-pickle`).
+
+Restore the override at the end of `loadInstanceState`, immediately before `return { config: result, ... }`, so it wins over all file / `OPENCODE_CONFIG_CONTENT` / managed-preferences / account config:
+
+```ts
+// OPENCODE_MODEL env var overrides model (highest priority).
+if (process.env.OPENCODE_MODEL) {
+  result.model = process.env.OPENCODE_MODEL
+  yield* Effect.logDebug("loaded model override from OPENCODE_MODEL env var", {
+    model: result.model,
+  })
+}
+```
+
+Downstream chain (verified): `cfg.model` → `Provider.defaultModel()` (`if (cfg.model) return parseModel(cfg.model)`) → ACP `Directory` `snapshot.defaultModel` → `selectDefaultModel`. The provider (`openai-compatible`) + model are registered by the client via `OPENCODE_CONFIG_CONTENT.provider` (nuwaclaw `opencodeAcpSpawnConfig.buildOpencodeProviderSection`), so resolution succeeds once `cfg.model` is set.
+
+Replay checklist:
+- [ ] `config.ts` sets `result.model = process.env.OPENCODE_MODEL` at the end of `loadInstanceState` (before the final `return`)
+- [ ] Override placed AFTER managed-preferences / `OPENCODE_CONFIG_CONTENT` merges (highest priority)
+- [ ] Uses current logging API (`yield* Effect.logDebug`, not legacy `log.debug`)
+- [ ] `OPENCODE_MODEL` absent → behavior unchanged (no fallback regression)
+
+---
+
 ## Change Log
 
 - 2026-04-27: Initial retention document created after merge stabilization.
@@ -239,3 +267,4 @@ Replay checklist:
 - 2026-04-27: Batch 1.5 — Provider model adaptation: `anthropic` token overrides, `anthropic-compatible`, `openai-compatible` restored in Effect architecture.
 - 2026-04-27: Batch 4 — CI build-release workflow, publish simplification, pre-push hook, offline models loading.
 - 2026-04-27: Batch 1 complete. Typecheck passes. Batches 2 & 3 confirmed no-op.
+- 2026-06-13: Batch 5 — Restored `OPENCODE_MODEL` env → `cfg.model` override (lost in v1.17.4 sync `ca631d34c`); fixes ACP sessions falling back to `opencode/big-pickle`.
