@@ -96,7 +96,7 @@
 | `packages/opencode/script/verify-registry-complete.ts` | 注册表完整性校验 |
 | `packages/opencode/script/postinstall.mjs` | 自定义 postinstall |
 
-## 8. 文档（5 文件）
+## 8. 文档（6 文件）
 
 | 文件 | 说明 |
 |------|------|
@@ -105,16 +105,45 @@
 | `README.zh.md` | 中文 README |
 | `docs/NUWAXCODE-CUSTOM-FEATURES.md` | 本文件 |
 | `docs/PERF-*.md` | 性能优化文档 |
+| `packages/opencode/docs/model-acp-replay-retention.md` | ACP 模型回放保留文档（含 Batch 5 OPENCODE_MODEL 恢复记录） |
 
 ## 9. 环境变量支持
 
 | 变量 | 文件 | 说明 |
 |------|------|------|
-| `OPENCODE_MODEL` | `src/config/config.ts` | 指定默认模型 |
+| `OPENCODE_MODEL` | `src/config/config.ts` | **关键**：指定默认模型，见下方详细说明 |
 | `OPENCODE_API_BASE` | `src/provider/provider.ts` | 自定义 API 基础 URL |
 | `OPENCODE_API_KEY` | `src/provider/provider.ts` | 自定义 API Key |
 | `OPENCODE_LOG_DIR` | `src/config/config.ts` | 日志目录 |
 | `NUWAX_AGENT_SANDBOX_CONFIG` | `src/sandbox/env.ts` | 沙箱配置 JSON |
+| `OPENCODE_MODELS_URL` | `src/provider/models.ts` | 自定义模型列表 URL |
+| `OPENCODE_MODELS_PATH` | `src/provider/models.ts` | 自定义模型列表本地路径 |
+| `OPENCODE_CONFIG_CONTENT` | `src/config/config.ts` | JSON 格式的内联配置（nuwaclaw 注入 provider 等） |
+
+### `OPENCODE_MODEL` 详细说明（易丢失，合并时必查）
+
+**作用**：nuwaclaw 客户端通过此环境变量下发引擎模型（如 `openai-compatible/glm-5`），是最高优先级的模型配置。
+
+**数据流**：
+```
+OPENCODE_MODEL env var
+  → config.ts loadInstanceState() 末尾: result.model = process.env.OPENCODE_MODEL
+  → Provider.defaultModel(): if (cfg.model) return parseModel(cfg.model)
+  → ACP Directory snapshot.defaultModel
+  → selectDefaultModel(snapshot)
+```
+
+**关键位置**：`src/config/config.ts` 的 `loadInstanceState` 函数末尾，`return { config: result, ... }` 之前。必须放在所有文件/managed/account 配置合并之后，确保最高优先级。
+
+**易丢失原因**：upstream v1.17.4 sync 时被误删（commit `ca631d34c`），导致 `cfg.model` 为空，ACP session 回退到默认模型 `opencode/big-pickle`。已在 commit `18af4faf0649` 恢复。
+
+**合并检查清单**：
+- [ ] `config.ts` 末尾有 `if (process.env.OPENCODE_MODEL) { result.model = ... }`
+- [ ] 位于 managed-preferences / `OPENCODE_CONFIG_CONTENT` 合并之后
+- [ ] 使用 Effect API（`yield* Effect.logDebug`，非 legacy `log.debug`）
+- [ ] 不存在时不改变行为（无回归）
+
+**关联文档**：`packages/opencode/docs/model-acp-replay-retention.md` Batch 5
 
 ## 10. 依赖版本差异
 
