@@ -163,6 +163,8 @@ export function make(input: {
     const selected = selectDefaultModel(snapshot)
     const variant = selectVariant(snapshot, selected)
     const modeId = snapshot.availableModes.length > 0 ? snapshot.defaultModeID : undefined
+    // Extract systemPrompt from _meta (sent by nuwaclaw client)
+    const metaSystemPrompt = (params as any)._meta?.systemPrompt as import("./types").ACPSystemPromptMeta | undefined
     const created = yield* profiledRequest(
       "acp.newSession.session.create",
       () =>
@@ -187,6 +189,7 @@ export function make(input: {
       model: selected,
       variant,
       modeId,
+      systemPrompt: metaSystemPrompt,
     })
     sessionSnapshots.set(state.id, snapshot)
 
@@ -502,6 +505,13 @@ export function make(input: {
       const command = detectSlashCommand(parts)
 
       if (!command) {
+        // Build system prompt from session state (set during newSession from _meta.systemPrompt)
+        const systemField = (() => {
+          const sp = current.systemPrompt
+          if (!sp) return undefined
+          if (typeof sp === "string") return sp
+          return sp.append
+        })()
         const response = yield* request(
           () =>
             input.sdk.session.prompt(
@@ -515,6 +525,7 @@ export function make(input: {
                 parts,
                 ...(modeId ? { agent: modeId } : {}),
                 directory: current.cwd,
+                ...(systemField ? { system: systemField } : {}),
               },
               { throwOnError: true },
             ),

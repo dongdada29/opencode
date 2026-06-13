@@ -29,6 +29,7 @@ export type Info = {
   variant?: string
   modeId?: string
   knownParts: ReadonlyMap<string, KnownMessagePartMetadata>
+  systemPrompt?: import("./types").ACPSystemPromptMeta
 }
 
 export type StoreInput = {
@@ -39,6 +40,7 @@ export type StoreInput = {
   model?: SelectedModel
   variant?: string
   modeId?: string
+  systemPrompt?: import("./types").ACPSystemPromptMeta
 }
 
 export type RecordPartMetadataInput = {
@@ -212,6 +214,7 @@ function makeSession(input: StoreInput): Info {
     variant: input.variant,
     modeId: input.modeId,
     knownParts: new Map(),
+    systemPrompt: input.systemPrompt,
   }
 }
 
