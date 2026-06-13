@@ -256,6 +256,102 @@ Replay checklist:
 - [ ] Uses current logging API (`yield* Effect.logDebug`, not legacy `log.debug`)
 - [ ] `OPENCODE_MODEL` absent → behavior unchanged (no fallback regression)
 
+> Note (updated): Batch 5 alone is NOT sufficient — see Batch 6.2. The client sends a raw
+> model (`config.model` without the `openai-compatible/` prefix) and NO provider block on the
+> nuwaxcode path, so provider+model registration must happen in nuwaxcode, not the client.
+
+---
+
+## Batch 6 — ACP model selection + execution resolution (COMPLETED 2026-06-13)
+
+Two more v1.2.0 behaviors lost in the v1.17.4 sync (acp-next promotion). Together with
+Batch 5 + Batch 1.5c these complete the full model-dispatch flow
+(selection → provider instantiation → execution). The end-to-end symptom of their absence was
+`opencode/big-pickle` selection and/or `Internal error: OpenCode service failure` at prompt time.
+
+### 6.1 `defaultModelFromConfig` trusts the configured model — `src/acp/service.ts`
+
+The promoted acp-next `defaultModelFromConfig` requires the configured model's provider+model to
+be pre-registered (`providers[id].models[id]`) before using it, else falls back to
+`opencode/big-pickle`. v1.2.0's `defaultModel` trusted `config.defaultModel` unconditionally and
+let the custom loader instantiate the provider on demand.
+
+Restore trust-first at the top of `defaultModelFromConfig`:
+
+```ts
+const configured = configuredModel ? Provider.parseModel(configuredModel) : undefined
+// 直接信任 config 下发的模型（v1.2.0 行为）：provider 由 custom loader 从 env 按需实例化，
+// 不要求模型项预注册——否则 openai-compatible/<custom-model> 等未预置模型会回退到 opencode/big-pickle。
+if (configured) return configured
+```
+
+Replay checklist:
+- [ ] `service.ts` `defaultModelFromConfig` returns `configured` FIRST, before the
+      `providers[...]?.models[...]` registration check and the opencode/best fallbacks
+
+### 6.2 Register provider+model from `OPENCODE_MODEL` — `src/config/config.ts`
+
+Selection trusting the model is not enough — **execution** (`session/prompt` → server `getModel`)
+needs the model registered in `provider.models`. The client does NOT inject a provider block for
+the nuwaxcode path (it sets `OPENCODE_MODEL=openai-compatible/glm-5` env but a raw `config.model`
+without the `openai-compatible/` prefix → nuwaclaw `buildOpencodeProviderSection` returns
+undefined → no `provider` block in `OPENCODE_CONFIG_CONTENT`). Without registration,
+`getModel('glm-5')` fails → `Internal error: OpenCode service failure`.
+
+Fix: in `loadInstanceState`, when `OPENCODE_MODEL` is a `provider/model` pair, register it into
+`cfg.provider` (equivalent to the client injecting a provider block, but on the nuwaxcode side).
+`configProviders` then writes it to the provider database, the `openai-compatible` custom loader
+(Batch 1.5c) applies (autoload from `OPENAI_BASE_URL`/`OPENAI_API_KEY`), and execution resolves.
+
+```ts
+if (process.env.OPENCODE_MODEL) {
+  result.model = process.env.OPENCODE_MODEL
+  const slashIdx = result.model.indexOf("/")
+  if (slashIdx > 0) {
+    const pid = result.model.slice(0, slashIdx)
+    const mid = result.model.slice(slashIdx + 1)
+    if (mid) {
+      result.provider = result.provider ?? {}
+      const existing = result.provider[pid]
+      if (!existing) result.provider[pid] = { name: pid, models: { [mid]: { name: mid } } }
+      else {
+        existing.models = existing.models ?? {}
+        if (!existing.models[mid]) existing.models[mid] = { name: mid }
+      }
+    }
+  }
+  yield* Effect.logDebug("loaded model override from OPENCODE_MODEL env var", { model: result.model })
+}
+```
+
+Replay checklist:
+- [ ] `config.ts` registers `provider[pid].models[mid]` from `OPENCODE_MODEL` alongside setting `result.model`
+- [ ] `OPENCODE_MODEL` absent or without `/` → behavior unchanged
+
+### 6.3 Regression test (回测)
+
+After any dev/upstream merge, verify the full model-dispatch flow with a direct ACP handshake
+**without a provider block** (this is the exact scenario the client hits on the nuwaxcode path).
+
+Env to reproduce the failing case:
+```
+OPENCODE_MODEL=openai-compatible/glm-5
+OPENAI_BASE_URL=<proxy url>      OPENAI_API_KEY=<key>
+OPENCODE_CONFIG_CONTENT={"permission":{"edit":"allow","bash":"allow"}}   # NO provider block
+HOME=<temp dir>
+```
+
+Drive the handshake (initialize → `session/new` → `session/prompt` with `prompt:[{type:"text",text:"…"}]`)
+using the bundled node against the nuwaxcode binary.
+
+Pass criteria (ALL must hold):
+- [ ] `session/new` configOptions `model.currentValue` = `openai-compatible/glm-5`
+      (NOT `opencode/big-pickle` — catches Batch 5 / 6.1 regression)
+- [ ] `session/prompt` returns a result with `stopReason=end_turn`
+      (NOT error `-32603 "Internal error: OpenCode service failure"` — catches Batch 6.2 / 1.5c regression)
+
+If either regresses, replay Batch 5 + Batch 1.5c + Batch 6.1 + Batch 6.2.
+
 ---
 
 ## Change Log
@@ -269,3 +365,6 @@ Replay checklist:
 - 2026-04-27: Batch 1 complete. Typecheck passes. Batches 2 & 3 confirmed no-op.
 - 2026-06-13: Batch 5 — Restored `OPENCODE_MODEL` env → `cfg.model` override (lost in v1.17.4 sync `ca631d34c`); fixes ACP sessions falling back to `opencode/big-pickle`.
 - 2026-06-13: Re-restored Batch 1.5c custom loaders (`anthropic-compatible`, `openai-compatible`) in `src/provider/provider.ts` `custom()` — also lost in the same v1.17.4 sync. Without the `openai-compatible` loader, a provider registered as `openai-compatible` (via `OPENCODE_CONFIG_CONTENT`) never instantiates, so `defaultModelFromConfig` can't find the dispatched model (e.g. `openai-compatible/glm-5`) and falls back to `opencode/big-pickle` even with `OPENCODE_MODEL` set. The nuwaclaw client already injects `provider.openai-compatible.models.<model>` + `OPENAI_BASE_URL`/`OPENAI_API_KEY` env, so restoring the loader makes the provider auto-load and the model resolve.
+- 2026-06-13: Batch 6.1 — `defaultModelFromConfig` in `src/acp/service.ts` trusts the configured model first (v1.2.0 behavior), before the provider-registration/opencode fallbacks. Fixes model selection falling back to `opencode/big-pickle`.
+- 2026-06-13: Batch 6.2 — register provider+model from `OPENCODE_MODEL` into `cfg.provider` in `src/config/config.ts`. Fixes execution `Internal error: OpenCode service failure` when the client sends a raw model (`OPENCODE_MODEL` env prefixed, but no provider block in `OPENCODE_CONFIG_CONTENT`). This is the missing piece — Batch 5 alone left execution broken.
+- 2026-06-13: Batch 6.3 — added regression-test (回测) procedure: drive an ACP handshake without a provider block and assert `currentValue=openai-compatible/glm-5` + `stopReason=end_turn`.
