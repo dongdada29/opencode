@@ -2,7 +2,7 @@
 # npm 发布与校验（与 release.sh 后半段一致，供本地与 CI 共用）
 # Usage: ./scripts/release-publish.sh <version>
 # Env:
-#   NPM_DIST_TAG          dist-tag，默认 latest
+#   NPM_DIST_TAG          dist-tag；未设置时预发布版本（含 '-'）自动用 beta，稳定版用 latest
 #   SKIP_REGISTRY_VERIFY  设为 1 跳过发布后 registry 校验
 #   NODE_AUTH_TOKEN       CI 下发 npm token（本地可用 npm login）
 #   SKIP_DOCKER_PUBLISH   默认 1，仅发 npm
@@ -22,7 +22,7 @@ if [ ! -f "packages/opencode/package.json" ]; then
   exit 1
 fi
 
-NPM_DIST_TAG="${NPM_DIST_TAG:-latest}"
+NPM_DIST_TAG="$("$ROOT/scripts/resolve-npm-dist-tag.sh" "$VERSION")"
 
 echo "📦 Syncing package.json to version $VERSION..."
 export VERSION

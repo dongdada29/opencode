@@ -6,9 +6,8 @@
 # Example with OTP: ./release.sh 1.1.52 123456
 # Example skip OTP prompt: ./release.sh 1.1.52 --no-otp
 #
-# NPM dist-tag (default: latest). Set to e.g. beta to publish without moving latest:
-#   NPM_DIST_TAG=beta ./release.sh 1.1.72
-#   NPM_DIST_TAG=beta ./release.sh 1.1.72 123456
+# NPM dist-tag：未设置时预发布版本（如 1.3.0-beta.8）自动用 beta，稳定版用 latest。
+# 也可显式覆盖：NPM_DIST_TAG=beta ./release.sh 1.1.72
 #
 # 发版结束后默认会校验 npm 上 optional 子包是否齐全；若需跳过（例如 registry 延迟）：
 #   SKIP_REGISTRY_VERIFY=1 ./release.sh 1.1.76
@@ -30,14 +29,16 @@ if [ "$OTP_CODE" = "--no-otp" ]; then
   NO_OTP_FLAG="--no-otp"
   OTP_CODE=""
 fi
-NPM_DIST_TAG="${NPM_DIST_TAG:-latest}"
-
 if [ -z "$NEW_VERSION" ]; then
   echo "Error: Please provide a version number."
   echo "Usage: ./release.sh <new_version> [otp_code|--no-otp]"
-  echo "Optional: NPM_DIST_TAG=beta ./release.sh <new_version> [otp_code]"
+  echo "Optional: NPM_DIST_TAG=<tag> ./release.sh <new_version> [otp_code]"
   exit 1
 fi
+
+ROOT="$(pwd)"
+NPM_DIST_TAG="$("$ROOT/scripts/resolve-npm-dist-tag.sh" "$NEW_VERSION")"
+echo "📌 npm dist-tag: $NPM_DIST_TAG"
 
 echo "🚀 Starting release process for version $NEW_VERSION..."
 
@@ -68,7 +69,6 @@ echo "✅ Updated $PACKAGE_JSON to version $NEW_VERSION"
 echo "📝 Please ensure you have updated CHANGELOG-nuwaxcode.md"
 read -p "Press Enter to continue if changelog is updated (or Ctrl+C to abort)..."
 
-ROOT="$(pwd)"
 echo "🏗️  Rebuilding binaries for version $NEW_VERSION..."
 (cd packages/opencode && OPENCODE_VERSION="$NEW_VERSION" OPENCODE_CHANNEL="${NPM_DIST_TAG}" bun run script/build.ts)
 

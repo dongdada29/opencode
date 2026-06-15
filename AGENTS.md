@@ -18,6 +18,7 @@
      - 发版前在仓库内完成：`CHANGELOG-nuwaxcode.md`、`packages/opencode/package.json` 版本号。
      - CI [`.github/workflows/build-release.yml`](.github/workflows/build-release.yml)：拉取 models.dev → 全平台构建 → GitHub Release → npm。
      - npm 发布与校验与 [`scripts/release-publish.sh`](scripts/release-publish.sh) 一致（`check-version-consistency` pre/post、清理 `dist/nuwaxcode`）。需配置 secret `NPM_TOKEN`。
+     - **npm dist-tag**：预发布版本（如 `1.3.0-beta.8`）自动发布到 `beta`；稳定版（如 `1.2.3`）发布到 `latest`。逻辑见 [`scripts/resolve-npm-dist-tag.sh`](scripts/resolve-npm-dist-tag.sh)。
   5. **Verify**: `https://github.com/nuwax-ai/nuwaxcode/releases/tag/v<version>` 与 `npm view nuwaxcode@<version> version`。
   6. **Electron Integration**: Update `NUWAXCODE_VERSION` in Electron client's `scripts/prepare/prepare-nuwaxcode.js` and `installVersion` in `src/main/services/system/dependencies.ts`, then run `node scripts/prepare/prepare-nuwaxcode.js`.
   7. **本地全量发版（含构建）**: `./release.sh <version> [otp|--no-otp]`；仅 npm 发布段：`./scripts/release-publish.sh <version>`（需已存在 `packages/opencode/dist`）。

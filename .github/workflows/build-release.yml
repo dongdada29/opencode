@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.version.outputs.version }}
+      dist_tag: ${{ steps.dist_tag.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -48,6 +49,15 @@ jobs:
           TAG="${GITHUB_REF#refs/tags/}"
           echo "version=${TAG#v}" >> $GITHUB_OUTPUT
 
+      # 预发布版本（如 1.3.0-beta.8）发布到 beta dist-tag，避免污染 latest
+      - name: Resolve npm dist-tag
+        id: dist_tag
+        run: |
+          TAG="$("./scripts/resolve-npm-dist-tag.sh" "${{ steps.version.outputs.version }}")"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "channel=$TAG" >> $GITHUB_OUTPUT
+          echo "npm dist-tag: $TAG"
+
       - name: Sync package.json version
         run: |
           VERSION="${{ steps.version.outputs.version }}"
@@ -70,7 +80,7 @@ jobs:
         run: bun run script/build.ts
         env:
           OPENCODE_VERSION: ${{ steps.version.outputs.version }}
-          OPENCODE_CHANNEL: latest
+          OPENCODE_CHANNEL: ${{ steps.dist_tag.outputs.channel }}
 
       - name: List dist directories
         run: ls -la packages/opencode/dist/
@@ -181,7 +191,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: "false"
-          NPM_DIST_TAG: latest
+          NPM_DIST_TAG: ${{ needs.build.outputs.dist_tag }}
           SKIP_DOCKER_PUBLISH: "1"
           # CI 不执行 dist 二进制 smoke（编译产物在 runner 上可能因运行时依赖失败）；版本由 dist package.json 保证
           SKIP_LOCAL_SMOKE: "1"
