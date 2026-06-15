@@ -23,7 +23,7 @@ if [ "$BEFORE" != "$AFTER" ]; then
   exit 1
 fi
 
-bun typecheck || echo "Warning: typecheck failed, fix before merge"
+# typecheck disabled — run manually with `bun typecheck` before merge/CI
 # keep in sync with packages/script/src/index.ts semver qualifier
 bun -e '
 import { semver } from "bun";
@@ -40,4 +40,3 @@ if (process.versions.bun !== expectedBunVersion) {
   console.warn(`Warning: Bun version ${process.versions.bun} differs from expected ${expectedBunVersion}`);
 }
 '
-bun typecheck

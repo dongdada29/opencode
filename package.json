@@ -135,8 +135,10 @@
     "@types/node": "catalog:"
   },
   "patchedDependencies": {
+    "@lydell/node-pty@1.2.0-beta.10": "patches/@lydell%2Fnode-pty@1.2.0-beta.10.patch",
     "@npmcli/agent@4.0.0": "patches/@npmcli%2Fagent@4.0.0.patch",
     "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",
-    "solid-js@1.9.10": "patches/solid-js@1.9.10.patch"
+    "solid-js@1.9.10": "patches/solid-js@1.9.10.patch",
+    "virtua@0.49.1": "patches/virtua@0.49.1.patch"
   }
 }

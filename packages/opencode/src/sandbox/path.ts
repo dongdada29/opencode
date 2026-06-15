@@ -1,5 +1,5 @@
 import path from "path"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import type { Info as SandboxInfo } from "@/config/sandbox"
 
 export function isWithinRoot(candidate: string, root: string): boolean {
@@ -11,7 +11,7 @@ export function isWithinRoot(candidate: string, root: string): boolean {
 
 export function normalizeSandboxPath(filepath: string): string {
   const resolved = path.resolve(filepath)
-  return process.platform === "win32" ? AppFileSystem.normalizePath(resolved) : resolved
+  return process.platform === "win32" ? FSUtil.normalizePath(resolved) : resolved
 }
 
 export function collectTempDirs(): string[] {

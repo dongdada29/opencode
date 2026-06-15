@@ -1,0 +1,18 @@
+diff --git a/package.json b/package.json
+index 1111111..2222222 100644
+--- a/package.json
++++ b/package.json
+@@ -5,7 +5,12 @@
+   "version": "1.2.0-beta.10",
+   "license": "MIT",
+   "type": "commonjs",
+-  "exports": "./index.js",
++  "exports": {
++    ".": {
++      "types": "./node-pty.d.ts",
++      "default": "./index.js"
++    }
++  },
+   "types": "./node-pty.d.ts",
+   "repository": {
+     "type": "git",
