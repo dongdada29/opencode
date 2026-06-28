@@ -115,11 +115,9 @@ export const layer = Layer.effect(
         } satisfies Record<string, "allow" | "ask" | "deny">
 
         const defaults = Permission.fromConfig({
-          // Default unlisted tools (including MCP) to ask so ACP clients receive
-          // requestPermission; builtins below override with explicit allow/deny.
+          // Default unlisted tools (including MCP) and edit/bash to ask for ACP approval;
+          // other builtins below override with explicit allow/deny.
           "*": "ask",
-          edit: "allow",
-          bash: "allow",
           webfetch: "allow",
           websearch: "allow",
           skill: "allow",
