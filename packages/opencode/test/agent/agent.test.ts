@@ -486,6 +486,14 @@ it.instance("webfetch is allowed by default", () =>
   }),
 )
 
+it.instance("unknown tools including MCP default to ask", () =>
+  Effect.gen(function* () {
+    const build = yield* load((svc) => svc.get("build"))
+    expect(evalPerm(build, "A______get_stock_data")).toBe("ask")
+    expect(evalPerm(build, "custom_mcp_tool")).toBe("ask")
+  }),
+)
+
 it.instance(
   "legacy tools config converts to permissions",
   () =>
