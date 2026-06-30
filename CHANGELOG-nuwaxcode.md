@@ -2,6 +2,19 @@
 
 本文档总结了 `feat/nuwaxcode` 分支相对于主分支的主要更改。
 
+## v1.3.18 (2026-06-30)
+
+> 正式版（npm `latest`）。版本号跳过 `1.3.0`–`1.3.17`：仓库内 `v1.3.0`–`v1.3.17` tag 已被上游 opencode 同步历史占用，避免 force-push 冲突。
+
+### ✨ 新特性 / 改进（自 v1.2.3 稳定版以来）
+
+- **Agent 权限**：未列出工具（含 MCP）及 `edit`、`bash` 默认 `ask`，需 ACP 客户端审批；`webfetch`、`grep`、`task` 等其它内置工具仍为 `allow`。
+- **模型目录**：同步 models.dev（含 Kimi K2.7 Code、GLM-5.2 等新增与下线模型）。
+- **ACP / 模型解析**：信任 `OPENCODE_MODEL` 配置并在 config 中注册 provider+model，恢复默认模型选择行为。
+- **发版**：预发布版本自动发布到 npm `beta` dist-tag，稳定版发布到 `latest`。
+
+---
+
 ## v1.3.0-beta.11 (2026-06-28)
 
 ### 🔄 行为变更
