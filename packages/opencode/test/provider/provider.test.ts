@@ -277,6 +277,36 @@ it.instance(
 )
 
 it.instance(
+  "OPENCODE_FORCE_INPUT_MODALITIES forces image/pdf input capabilities",
+  Effect.gen(function* () {
+    yield* setProcessEnv("OPENCODE_FORCE_INPUT_MODALITIES", "image,pdf")
+    const providers = yield* list
+    const model = providers[ProviderV2.ID.make("custom-provider")].models["custom-model"]
+    // custom-model declares no modalities → image/pdf default false, now forced on
+    expect(model.capabilities.input.image).toBe(true)
+    expect(model.capabilities.input.pdf).toBe(true)
+    // non-forced modalities keep their default
+    expect(model.capabilities.input.audio).toBe(false)
+    expect(model.capabilities.input.video).toBe(false)
+  }),
+  {
+    config: {
+      provider: {
+        "custom-provider": {
+          name: "Custom Provider",
+          npm: "@ai-sdk/openai-compatible",
+          api: "https://api.custom.com/v1",
+          models: {
+            "custom-model": { name: "Custom Model" },
+          },
+          options: { apiKey: "custom-key" },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
   "env variable takes precedence, config merges options",
   Effect.gen(function* () {
     yield* setProcessEnv("ANTHROPIC_API_KEY", "env-api-key")
