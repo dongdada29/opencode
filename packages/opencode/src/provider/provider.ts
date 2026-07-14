@@ -31,6 +31,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
+import { Flag } from "@opencode-ai/core/flag/flag"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
 
@@ -1248,6 +1249,7 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
 }
 
 function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
+  const forced = new Set(Flag.OPENCODE_FORCE_INPUT_MODALITIES)
   const base: Model = {
     id: ModelV2.ID.make(model.id),
     providerID: ProviderV2.ID.make(provider.id),
@@ -1273,11 +1275,11 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
       attachment: model.attachment ?? false,
       toolcall: model.tool_call ?? true,
       input: {
-        text: model.modalities?.input?.includes("text") ?? false,
-        audio: model.modalities?.input?.includes("audio") ?? false,
-        image: model.modalities?.input?.includes("image") ?? false,
-        video: model.modalities?.input?.includes("video") ?? false,
-        pdf: model.modalities?.input?.includes("pdf") ?? false,
+        text: forced.has("text") || (model.modalities?.input?.includes("text") ?? false),
+        audio: forced.has("audio") || (model.modalities?.input?.includes("audio") ?? false),
+        image: forced.has("image") || (model.modalities?.input?.includes("image") ?? false),
+        video: forced.has("video") || (model.modalities?.input?.includes("video") ?? false),
+        pdf: forced.has("pdf") || (model.modalities?.input?.includes("pdf") ?? false),
       },
       output: {
         text: model.modalities?.output?.includes("text") ?? false,
@@ -1479,6 +1481,7 @@ export const layer = Layer.effect(
               if (model.id && model.id !== modelID) return modelID
               return existingModel?.name ?? modelID
             })
+            const forced = new Set(Flag.OPENCODE_FORCE_INPUT_MODALITIES)
             const parsedModel: Model = {
               id: ModelV2.ID.make(modelID),
               api: {
@@ -1495,11 +1498,11 @@ export const layer = Layer.effect(
                 attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
                 toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
                 input: {
-                  text: model.modalities?.input?.includes("text") ?? existingModel?.capabilities.input.text ?? true,
-                  audio: model.modalities?.input?.includes("audio") ?? existingModel?.capabilities.input.audio ?? false,
-                  image: model.modalities?.input?.includes("image") ?? existingModel?.capabilities.input.image ?? false,
-                  video: model.modalities?.input?.includes("video") ?? existingModel?.capabilities.input.video ?? false,
-                  pdf: model.modalities?.input?.includes("pdf") ?? existingModel?.capabilities.input.pdf ?? false,
+                  text: forced.has("text") || (model.modalities?.input?.includes("text") ?? existingModel?.capabilities.input.text ?? true),
+                  audio: forced.has("audio") || (model.modalities?.input?.includes("audio") ?? existingModel?.capabilities.input.audio ?? false),
+                  image: forced.has("image") || (model.modalities?.input?.includes("image") ?? existingModel?.capabilities.input.image ?? false),
+                  video: forced.has("video") || (model.modalities?.input?.includes("video") ?? existingModel?.capabilities.input.video ?? false),
+                  pdf: forced.has("pdf") || (model.modalities?.input?.includes("pdf") ?? existingModel?.capabilities.input.pdf ?? false),
                 },
                 output: {
                   text: model.modalities?.output?.includes("text") ?? existingModel?.capabilities.output.text ?? true,

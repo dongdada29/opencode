@@ -144,7 +144,10 @@ const provider: Provider.Info = {
 describe("ACP service sessions", () => {
   const makeService = (
     messages: readonly { info: unknown; parts: readonly unknown[] }[] = [],
-    options?: { abort?: (input: { sessionID: string }) => Promise<{ data: boolean }> },
+    options?: {
+      abort?: (input: { sessionID: string }) => Promise<{ data: boolean }>
+      assistantError?: ACPError.AssistantError
+    },
   ) => {
     const updates: SessionNotification[] = []
     const mcpAdds: string[] = []
@@ -197,12 +200,15 @@ describe("ACP service sessions", () => {
           prompts.push(input)
           return Promise.resolve({
             data: {
-              info: assistantInfo({
-                input: 100,
-                output: 40,
-                reasoning: 7,
-                cache: { read: 11, write: 13 },
-              }),
+              info: assistantInfo(
+                {
+                  input: 100,
+                  output: 40,
+                  reasoning: 7,
+                  cache: { read: 11, write: 13 },
+                },
+                options?.assistantError,
+              ),
             },
           })
         },
@@ -1143,15 +1149,104 @@ describe("ACP service sessions", () => {
 
     expect(error.code).toBe(-32000)
   })
+
+  // An assistant message error carried on a successful HTTP 200 prompt
+  // response (info.error) must terminate the turn with the matching stop
+  // reason or JSON-RPC error instead of a silent end_turn.
+
+  it("maps assistant content-filter error to refusal stop reason", async () => {
+    const { service } = makeService([], {
+      assistantError: { name: "ContentFilterError", data: { message: "blocked by safety" } },
+    })
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+    const result = await Effect.runPromise(
+      service.prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "hello" }] }),
+    )
+    expect(result.stopReason).toBe("refusal")
+    expect(result._meta).toMatchObject({ error: { name: "ContentFilterError" } })
+  })
+
+  it("maps assistant abort error to cancelled stop reason", async () => {
+    const { service } = makeService([], {
+      assistantError: { name: "MessageAbortedError", data: { message: "Aborted" } },
+    })
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+    const result = await Effect.runPromise(
+      service.prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "hello" }] }),
+    )
+    expect(result.stopReason).toBe("cancelled")
+  })
+
+  it("maps assistant output-length error to max_tokens stop reason", async () => {
+    const { service } = makeService([], {
+      assistantError: { name: "MessageOutputLengthError", data: {} },
+    })
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+    const result = await Effect.runPromise(
+      service.prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "hello" }] }),
+    )
+    expect(result.stopReason).toBe("max_tokens")
+  })
+
+  it("maps assistant auth error to authRequired", async () => {
+    const { service } = makeService([], {
+      assistantError: { name: "ProviderAuthError", data: { providerID: "test", message: "invalid api key" } },
+    })
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+    const error = await Effect.runPromise(
+      service
+        .prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "hello" }] })
+        .pipe(Effect.mapError(ACPError.toRequestError), Effect.flip),
+    )
+    expect(error.code).toBe(-32000)
+    expect(error.message).toContain("invalid api key")
+  })
+
+  it("maps payment-required API error to authRequired", async () => {
+    const { service } = makeService([], {
+      assistantError: {
+        name: "APIError",
+        data: { message: "余额不足", statusCode: 402, isRetryable: false },
+      },
+    })
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+    const error = await Effect.runPromise(
+      service
+        .prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "hello" }] })
+        .pipe(Effect.mapError(ACPError.toRequestError), Effect.flip),
+    )
+    expect(error.code).toBe(-32000)
+    expect(error.message).toContain("余额不足")
+  })
+
+  it("maps generic API error to internalError", async () => {
+    const { service } = makeService([], {
+      assistantError: {
+        name: "APIError",
+        data: { message: "server error", statusCode: 500, isRetryable: true },
+      },
+    })
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+    const error = await Effect.runPromise(
+      service
+        .prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "hello" }] })
+        .pipe(Effect.mapError(ACPError.toRequestError), Effect.flip),
+    )
+    expect(error.code).toBe(-32603)
+  })
 })
 
-function assistantInfo(tokens: UsageService.AssistantTokenCost["tokens"]): UsageService.AssistantMessage {
+function assistantInfo(
+  tokens: UsageService.AssistantTokenCost["tokens"],
+  error?: ACPError.AssistantError,
+): UsageService.AssistantMessage & { error?: ACPError.AssistantError } {
   return {
     role: "assistant",
     providerID: "test",
     modelID: "test-model",
     cost: 0,
     tokens,
+    ...(error ? { error } : {}),
   }
 }
 

@@ -75,4 +75,20 @@ export const Flag = {
   get OPENCODE_CLIENT() {
     return process.env["OPENCODE_CLIENT"] ?? "cli"
   },
+  // Comma-separated input modalities to force-enable on every dynamic model
+  // (e.g. "image,pdf"), bypassing models.dev/opencode.json declarations.
+  // "text" is always included: every model accepts text input, and forcing it
+  // on fixes models whose models.dev/opencode.json entry omits a text modality
+  // (which would otherwise mark them as not supporting text input).
+  // Evaluated at access time so runtime/test env overrides take effect.
+  // Invalid values are silently dropped; only text/audio/image/video/pdf apply.
+  get OPENCODE_FORCE_INPUT_MODALITIES() {
+    const allowed = ["text", "audio", "image", "video", "pdf"]
+    const parsed = (process.env["OPENCODE_FORCE_INPUT_MODALITIES"] ?? "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter((s) => s.length > 0 && allowed.includes(s))
+    if (!parsed.includes("text")) parsed.unshift("text")
+    return parsed
+  },
 }

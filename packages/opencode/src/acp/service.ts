@@ -532,7 +532,10 @@ export function make(input: {
           "session",
         )
         yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
-        return promptResponse(response.info, params.messageId)
+        return yield* promptResponse(
+          response.info.role === "assistant" ? response.info : undefined,
+          params.messageId,
+        )
       }
 
       const known = snapshot.availableCommands.find((item) => item.name === command.name)
@@ -554,7 +557,10 @@ export function make(input: {
           "session",
         )
         yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
-        return promptResponse(response.info, params.messageId)
+        return yield* promptResponse(
+          response.info.role === "assistant" ? response.info : undefined,
+          params.messageId,
+        )
       }
 
       if (command.name === "compact") {
@@ -574,7 +580,7 @@ export function make(input: {
       }
 
       yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
-      return promptResponse(undefined, params.messageId)
+      return yield* promptResponse(undefined, params.messageId)
     }),
     cancel,
   }
@@ -706,7 +712,12 @@ type MessageInfo = {
   readonly agent?: Message["agent"]
 }
 
-type AssistantInfo = UsageService.AssistantTokenCost | undefined
+type AssistantInfo =
+  | (UsageService.AssistantTokenCost & {
+      readonly providerID?: string
+      readonly error?: ACPError.AssistantError
+    })
+  | undefined
 
 function request<T>(fn: () => Promise<T | SdkResponse<T>>, service?: string) {
   return Effect.tryPromise({
@@ -824,13 +835,34 @@ function detectSlashCommand(parts: ReturnType<typeof promptContentToParts>) {
   return { name, args: rest.join(" ").trim() }
 }
 
-function promptResponse(info: AssistantInfo, messageId: string | null | undefined): PromptResponse {
-  return {
-    stopReason: "end_turn",
-    ...(info ? { usage: UsageService.buildUsage(info) } : {}),
-    ...(messageId ? { userMessageId: messageId } : {}),
-    _meta: {},
-  }
+function promptResponse(
+  info: AssistantInfo,
+  messageId: string | null | undefined,
+): Effect.Effect<PromptResponse, ACPError.Error> {
+  return Effect.gen(function* () {
+    const error = info?.error
+    if (!error) {
+      return {
+        stopReason: "end_turn",
+        ...(info ? { usage: UsageService.buildUsage(info) } : {}),
+        ...(messageId ? { userMessageId: messageId } : {}),
+        _meta: {},
+      }
+    }
+    // A turn ends with EITHER a response (stopReason) OR a JSON-RPC error —
+    // never both. Map the provider error to the semantically-matching
+    // termination so clients can tell a billing failure from a normal turn.
+    const mapped = ACPError.mapAssistantError(error, { providerID: info?.providerID })
+    if (mapped.kind === "stop") {
+      return {
+        stopReason: mapped.stopReason,
+        ...(info ? { usage: UsageService.buildUsage(info) } : {}),
+        ...(messageId ? { userMessageId: messageId } : {}),
+        _meta: { error: { ...mapped.meta } },
+      }
+    }
+    return yield* Effect.fail(mapped.error)
+  })
 }
 
 function sendUsageUpdate(

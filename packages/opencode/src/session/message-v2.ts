@@ -8,6 +8,7 @@ import {
   Assistant,
   AuthError,
   CompactionPart,
+  ContentFilterError,
   ContextOverflowError,
   Info,
   OutputLengthError,
@@ -20,6 +21,7 @@ import {
 } from "@opencode-ai/core/v1/session"
 
 import { NamedError } from "@opencode-ai/core/util/error"
+import { LLMError } from "@opencode-ai/llm"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { Database } from "@opencode-ai/core/database/database"
 import { NotFoundError } from "@/storage/storage"
@@ -710,6 +712,19 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
+    // LLM-layer errors carry a structured `reason`; map it to the matching
+    // assistant error instead of collapsing to UnknownError (which drops the
+    // reason and forces ACP clients to fall back to message-text matching).
+    case e instanceof LLMError: {
+      const reason = e.reason
+      if (reason._tag === "QuotaExceeded" || reason._tag === "Authentication") {
+        return new AuthError({ providerID: ctx.providerID, message: reason.message }, { cause: e }).toObject()
+      }
+      if (reason._tag === "ContentPolicy") {
+        return new ContentFilterError({ message: reason.message }, { cause: e }).toObject()
+      }
+      return new APIError({ message: reason.message, isRetryable: reason.retryable }, { cause: e }).toObject()
+    }
     case e instanceof Error:
       return new NamedError.Unknown({ message: errorMessage(e) }, { cause: e }).toObject()
     default:
