@@ -13,30 +13,35 @@ describe("Flag.OPENCODE_FORCE_INPUT_MODALITIES", () => {
     else process.env[key] = original
   })
 
-  test("empty when env is unset", () => {
+  test("defaults to text when env is unset", () => {
     delete process.env[key]
-    expect(Flag.OPENCODE_FORCE_INPUT_MODALITIES).toEqual([])
+    expect(Flag.OPENCODE_FORCE_INPUT_MODALITIES).toEqual(["text"])
   })
 
-  test("parses comma-separated modalities", () => {
+  test("always includes text alongside parsed modalities", () => {
     process.env[key] = "image,pdf"
-    expect(Flag.OPENCODE_FORCE_INPUT_MODALITIES).toEqual(["image", "pdf"])
+    expect(Flag.OPENCODE_FORCE_INPUT_MODALITIES).toEqual(["text", "image", "pdf"])
   })
 
   test("normalizes case and surrounding whitespace", () => {
     process.env[key] = " IMAGE , PDF "
-    expect(Flag.OPENCODE_FORCE_INPUT_MODALITIES).toEqual(["image", "pdf"])
+    expect(Flag.OPENCODE_FORCE_INPUT_MODALITIES).toEqual(["text", "image", "pdf"])
   })
 
-  test("drops invalid values, keeps valid ones", () => {
+  test("drops invalid values, keeps valid ones (plus default text)", () => {
     process.env[key] = "image,foo,pdf,bar"
-    expect(Flag.OPENCODE_FORCE_INPUT_MODALITIES).toEqual(["image", "pdf"])
+    expect(Flag.OPENCODE_FORCE_INPUT_MODALITIES).toEqual(["text", "image", "pdf"])
   })
 
   test("evaluated at access time (runtime override takes effect)", () => {
     delete process.env[key]
-    expect(Flag.OPENCODE_FORCE_INPUT_MODALITIES).toEqual([])
+    expect(Flag.OPENCODE_FORCE_INPUT_MODALITIES).toEqual(["text"])
     process.env[key] = "image"
-    expect(Flag.OPENCODE_FORCE_INPUT_MODALITIES).toEqual(["image"])
+    expect(Flag.OPENCODE_FORCE_INPUT_MODALITIES).toEqual(["text", "image"])
+  })
+
+  test("does not duplicate text when explicitly provided", () => {
+    process.env[key] = "image,text"
+    expect(Flag.OPENCODE_FORCE_INPUT_MODALITIES).toEqual(["image", "text"])
   })
 })
