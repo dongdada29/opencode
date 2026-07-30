@@ -174,14 +174,22 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           }
 
           const truncated = yield* truncate.output(textParts.join("\n\n"), {}, input.agent)
+          // A2 / OpenUI：CallToolResult.structuredContent 在顶层，不是 result.metadata。
+          // Host sidecar 依赖完成态 rawOutput 拿到 nuwax.openui-ref；title 不能为空，
+          // 否则 Host 无法识别 nuwax_render_openui。
+          const mcpStructured =
+            result && typeof result === "object" && "structuredContent" in result
+              ? (result as { structuredContent?: unknown }).structuredContent
+              : undefined
           const metadata = {
             ...result.metadata,
+            ...(mcpStructured !== undefined ? { structuredContent: mcpStructured } : {}),
             truncated: truncated.truncated,
             ...(truncated.truncated && { outputPath: truncated.outputPath }),
           }
 
           const output = {
-            title: "",
+            title: key,
             metadata,
             output: truncated.content,
             attachments: attachments.map((attachment) => ({

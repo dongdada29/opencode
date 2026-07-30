@@ -180,13 +180,14 @@ export function duplicateRunningToolUpdate(input: {
 export function completedToolUpdate(input: {
   readonly toolCallId: string
   readonly toolName: string
-  readonly state: CompletedToolState & { readonly title: string }
+  readonly state: CompletedToolState & { readonly title?: string }
 }): ToolCallUpdate {
   return {
     toolCallId: input.toolCallId,
     status: "completed",
     kind: toToolKind(input.toolName),
-    title: input.state.title,
+    // MCP 包装层历史上写过 title:""；回退 toolName，便于 Host 识别 render 工具。
+    title: input.state.title || input.toolName,
     content: completedToolContent(input.toolName, input.state),
     rawInput: input.state.input,
     rawOutput: completedToolRawOutput(input.state),
@@ -221,11 +222,21 @@ export function errorToolUpdate(input: {
 }
 
 export function completedToolRawOutput(state: CompletedToolState) {
+  // 把 metadata.structuredContent 提升到 rawOutput 顶层，方便 Host 按
+  // structuredContent / rawOutput 优先键解析 OpenUI ref。
+  const structuredContent = structuredContentFromMetadata(state.metadata)
   return {
     output: state.output,
+    ...(structuredContent !== undefined ? { structuredContent } : {}),
     ...(state.metadata !== undefined ? { metadata: state.metadata } : {}),
     ...(state.attachments?.length ? { attachments: state.attachments } : {}),
   }
+}
+
+function structuredContentFromMetadata(metadata: unknown): unknown {
+  if (!metadata || typeof metadata !== "object") return undefined
+  if (!("structuredContent" in metadata)) return undefined
+  return (metadata as Record<string, unknown>).structuredContent
 }
 
 export function imageContents(attachments: ReadonlyArray<ToolAttachment>): ToolCallContent[] {
