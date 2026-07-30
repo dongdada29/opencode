@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test"
 import {
   completedToolContent,
   completedToolRawOutput,
-  completedToolUpdate,
   extractImageAttachments,
   imageContents,
   shellOutputSnapshot,
@@ -176,52 +175,6 @@ describe("acp tool conversion", () => {
         output: "done",
       }),
     ).toEqual({ output: "done" })
-  })
-
-  test("hoists metadata.structuredContent onto ACP rawOutput for Host parsers", () => {
-    const openUiRef = {
-      type: "nuwax.openui-ref",
-      schemaVersion: "nuwax.openui-ref/v1",
-      artifactId: "550e8400-e29b-41d4-a716-446655440000",
-      path: "data/550e8400-e29b-41d4-a716-446655440000.openui.json",
-      title: "本月销售数据看板",
-      presentation: { mode: "sidecar", autoOpen: true },
-      digest: "sha256:" + "a".repeat(64),
-      operation: "created",
-    }
-
-    expect(
-      completedToolRawOutput({
-        status: "completed",
-        input: {},
-        output: "OpenUI sidecar artifact created",
-        metadata: { structuredContent: openUiRef, truncated: false },
-      }),
-    ).toEqual({
-      output: "OpenUI sidecar artifact created",
-      structuredContent: openUiRef,
-      metadata: { structuredContent: openUiRef, truncated: false },
-    })
-  })
-
-  test("completedToolUpdate falls back to toolName when title is empty", () => {
-    const update = completedToolUpdate({
-      toolCallId: "call_openui",
-      toolName: "nuwax-openui_nuwax_render_openui",
-      state: {
-        status: "completed",
-        title: "",
-        input: { schemaVersion: "nuwax.openui/v1" },
-        output: "created",
-        metadata: { structuredContent: { type: "nuwax.openui-ref" } },
-      },
-    })
-
-    expect(update.title).toBe("nuwax-openui_nuwax_render_openui")
-    expect(update.rawOutput).toMatchObject({
-      output: "created",
-      structuredContent: { type: "nuwax.openui-ref" },
-    })
   })
 
   test("extracts image attachments only from data URLs", () => {

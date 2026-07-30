@@ -50,11 +50,8 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
   return dynamicTool({
     description: mcpTool.description ?? "",
     inputSchema: jsonSchema(inputSchema),
-    // 对齐 upstream 1.18.9：透传 CallToolResult；仅当 content 为空时把
-    // structuredContent 串成 text，供模型阅读。Host 所需的结构化对象仍由
-    // session/tools.ts 写入 metadata（见 OpenUI nuwax.openui-ref）。
-    execute: async (args: unknown, options) => {
-      const result = await client.callTool(
+    execute: (args: unknown, options) =>
+      client.callTool(
         {
           name: mcpTool.name,
           arguments: (args || {}) as Record<string, unknown>,
@@ -64,24 +61,8 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
           resetTimeoutOnProgress: true,
           signal: options.abortSignal,
           timeout,
-          // MCP SDK 仅在存在该 hook 时发送 progress token，从而允许超时重置。
-          onprogress: () => {},
         },
-      )
-      if (result.isError)
-        throw new Error(
-          result.content
-            .flatMap((item) => (item.type === "text" ? [item.text] : []))
-            .filter((text) => text.trim())
-            .join("\n\n") || "MCP tool returned an error",
-        )
-      if (result.content.length > 0 || result.structuredContent === undefined || result.structuredContent === null)
-        return result
-      return {
-        ...result,
-        content: [{ type: "text" as const, text: JSON.stringify(result.structuredContent) }],
-      }
-    },
+      ),
   })
 }
 

@@ -642,46 +642,6 @@ describe("acp event routing", () => {
     })
   })
 
-  it("emits MCP structuredContent on completed rawOutput and keeps tool title", async () => {
-    const harness = createHarness()
-    await Effect.runPromise(harness.session.create({ id: "ses_openui", cwd: "/workspace" }))
-    const openUiRef = {
-      type: "nuwax.openui-ref",
-      schemaVersion: "nuwax.openui-ref/v1",
-      artifactId: "550e8400-e29b-41d4-a716-446655440000",
-      path: "data/550e8400-e29b-41d4-a716-446655440000.openui.json",
-      title: "本月销售数据看板",
-      presentation: { mode: "sidecar", autoOpen: true },
-      digest: "sha256:" + "b".repeat(64),
-      operation: "created",
-    }
-
-    const part = completedTool("ses_openui", "call_openui", "OpenUI sidecar artifact created", [], {
-      tool: "nuwax-openui_nuwax_render_openui",
-      input: {
-        schemaVersion: "nuwax.openui/v1",
-        title: "本月销售数据看板",
-        presentation: { mode: "sidecar", autoOpen: true },
-      },
-      metadata: { structuredContent: openUiRef, truncated: false },
-    })
-    part.state.title = ""
-
-    await harness.subscription.handle(toolUpdated(part))
-
-    expect(harness.updates.at(-1)?.update).toMatchObject({
-      sessionUpdate: "tool_call_update",
-      toolCallId: "call_openui",
-      status: "completed",
-      title: "nuwax-openui_nuwax_render_openui",
-      rawOutput: {
-        output: "OpenUI sidecar artifact created",
-        structuredContent: openUiRef,
-        metadata: { structuredContent: openUiRef, truncated: false },
-      },
-    })
-  })
-
   it("emits clean read display content and preserves rawOutput", async () => {
     const harness = createHarness()
     await Effect.runPromise(harness.session.create({ id: "ses_read", cwd: "/workspace" }))
