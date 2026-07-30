@@ -2,6 +2,15 @@
 
 本文档总结了 `feat/nuwaxcode` 分支相对于主分支的主要更改。
 
+## v1.17.6 (2026-07-30)
+
+### 🐛 修复
+
+- **MCP / ACP（OpenUI Host）**：`session/tools` 将 MCP 工具完成结果的 `structuredContent` 写入 `metadata`，ACP 再透传到 `rawOutput`；工具展示名优先保留 MCP `title`/`name`（不再空字符串）。Host OpenUI sidecar 可据此拿到 `nuwax.openui-ref` 并正确挂载 UI。
+- **MCP catalog**：对齐上游调用行为（`isError` 抛错、`onprogress`）；当 content 为空时将 `structuredContent` 序列化为模型可见文本。
+
+---
+
 ## v1.3.18 (2026-06-30)
 
 > 正式版（npm `latest`）。版本号跳过 `1.3.0`–`1.3.17`：仓库内 `v1.3.0`–`v1.3.17` tag 已被上游 opencode 同步历史占用，避免 force-push 冲突。
