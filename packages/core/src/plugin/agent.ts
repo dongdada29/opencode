@@ -105,7 +105,11 @@ export const Plugin = PluginV2.define({
     const worktree = location.directory
     const whitelistedDirs = [TRUNCATION_GLOB, path.join(Global.Path.tmp, "*")]
     const readonlyExternalDirectory: PermissionV2.Ruleset = [
-      { action: "external_directory", resource: "*", effect: "ask" },
+      // external_directory 默认 allow（原为 ask）：访问工作区外目录不再发起权限询问。
+      // 该预检权限与它保护的 write/edit/bash 共用同一个 toolCallId，在外层网关（Java eventMap）
+      // 会与工具调用事件冲突、丢失 options，且 kind=null 前端无法渲染审批框，导致整条工具链卡死。
+      // 沙箱容器内访问外目录是预期行为，源头直接放行；真正的文件操作仍由 edit/write 权限把关。
+      { action: "external_directory", resource: "*", effect: "allow" },
       ...whitelistedDirs.map(
         (resource): PermissionV2.Rule => ({ action: "external_directory", resource, effect: "allow" }),
       ),
